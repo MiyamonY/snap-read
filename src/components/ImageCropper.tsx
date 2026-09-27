@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback } from "react";
 import { Crop, ChevronLeft, ChevronRight, Plus } from "lucide-react";
-import { CropRect } from "../types.ts";
+import type { CropRect } from "../types.ts";
 
 interface ImageCropperProps {
   imageDataUrl: string;
@@ -136,6 +136,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
       {totalCount > 1 && (
         <>
           <button
+            type="button"
             onClick={onPrev}
             disabled={currentIndex === 0}
             className="absolute left-4 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer shadow-xl"
@@ -145,6 +146,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
           </button>
 
           <button
+            type="button"
             onClick={onNext}
             disabled={currentIndex === totalCount - 1}
             className="absolute right-4 top-1/2 -translate-y-1/2 z-10 p-2 rounded-full bg-slate-900/80 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700 disabled:opacity-30 disabled:pointer-events-none transition-all cursor-pointer shadow-xl"
@@ -192,6 +194,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
       {/* Action Buttons */}
       <div className="absolute bottom-4 flex items-center gap-2.5 bg-slate-900/95 backdrop-blur px-4 py-2 rounded-full border border-slate-700 shadow-2xl z-10">
         <button
+          type="button"
           onClick={onAddMore}
           className="flex items-center gap-1 px-3 py-1.5 rounded-full bg-slate-800 hover:bg-indigo-600 text-slate-200 text-xs font-medium transition-all cursor-pointer"
           title="さらにカメラ・画面から画像を追加"
@@ -202,6 +205,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
 
         {cropRect && cropRect.width > 10 ? (
           <button
+            type="button"
             onClick={handleApplyCrop}
             className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
           >
@@ -212,6 +216,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
 
         {cropRect && (
           <button
+            type="button"
             onClick={() => setCropRect(null)}
             className="px-2.5 py-1.5 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-400 text-xs transition-colors cursor-pointer"
           >
@@ -220,6 +225,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
         )}
 
         <button
+          type="button"
           onClick={onDeleteCurrent}
           className="px-3 py-1.5 rounded-full bg-slate-800 hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 text-xs font-medium transition-colors cursor-pointer"
           title="この画像を削除"

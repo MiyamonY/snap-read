@@ -7,7 +7,8 @@ import { ApiKeyModal } from "./components/ApiKeyModal.tsx";
 import { ImageTray } from "./components/ImageTray.tsx";
 import { useMediaStream } from "./hooks/useMediaStream.ts";
 import { geminiService, DEFAULT_MODEL } from "./services/gemini.ts";
-import { AnalysisPreset, ChatMessage, CaptureItem } from "./types.ts";
+import { errorMessage } from "./utils.ts";
+import type { AnalysisPreset, ChatMessage, CaptureItem } from "./types.ts";
 
 export const App: React.FC = () => {
   // API Key state
@@ -15,7 +16,8 @@ export const App: React.FC = () => {
     return (
       localStorage.getItem("snapread_api_key") ||
       localStorage.getItem("maganize_api_key") ||
-      (import.meta as any).env?.VITE_GEMINI_API_KEY ||
+      (import.meta as ImportMeta & { env?: { VITE_GEMINI_API_KEY?: string } }).env
+        ?.VITE_GEMINI_API_KEY ||
       ""
     );
   });
@@ -45,7 +47,7 @@ export const App: React.FC = () => {
   // Gemini chat state
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [interactionId, setInteractionId] = useState<string | undefined>(undefined);
+  const [interactionId, setInteractionId] = useState<string | undefined>();
 
   // Initialize Gemini Service when API Key changes
   useEffect(() => {
@@ -75,9 +77,9 @@ export const App: React.FC = () => {
     try {
       const extracted = await geminiService.extractTextFromImages(imagesToExtract, DEFAULT_MODEL);
       setOcrText(extracted);
-    } catch (err: any) {
+    } catch (err) {
       console.error("OCR extraction failed:", err);
-      setOcrText(`⚠️ テキスト抽出エラー: ${err.message || String(err)}`);
+      setOcrText(`⚠️ テキスト抽出エラー: ${errorMessage(err)}`);
     } finally {
       setIsOcrLoading(false);
     }
@@ -108,7 +110,7 @@ export const App: React.FC = () => {
 
       fileArray.forEach((file, index) => {
         const reader = new FileReader();
-        reader.onload = (event) => {
+        reader.addEventListener("load", (event) => {
           const dataUrl = event.target?.result as string;
           if (dataUrl) {
             const newItem: CaptureItem = {
@@ -127,7 +129,7 @@ export const App: React.FC = () => {
             });
             setViewMode("crop");
           }
-        };
+        });
         reader.readAsDataURL(file);
       });
     },
@@ -147,7 +149,7 @@ export const App: React.FC = () => {
       setItems((prev) => {
         const filtered = prev.filter((item) => item.id !== id);
         if (selectedId === id) {
-          setSelectedId(filtered.length > 0 ? filtered[filtered.length - 1].id : null);
+          setSelectedId(filtered.at(-1)?.id ?? null);
           if (filtered.length === 0) {
             setViewMode("stream");
             setOcrText("");
@@ -264,11 +266,11 @@ export const App: React.FC = () => {
       if (result.interactionId) {
         setInteractionId(result.interactionId);
       }
-    } catch (err: any) {
+    } catch (err) {
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === modelMsgId
-            ? { ...msg, text: `⚠️ エラーが発生しました: ${err.message || String(err)}` }
+            ? { ...msg, text: `⚠️ エラーが発生しました: ${errorMessage(err)}` }
             : msg,
         ),
       );
@@ -306,42 +308,29 @@ export const App: React.FC = () => {
       },
     ]);
 
+    const appendChunk = (chunk: string) => {
+      setMessages((prev) =>
+        prev.map((msg) => (msg.id === modelMsgId ? { ...msg, text: msg.text + chunk } : msg)),
+      );
+    };
+
     try {
-      if (interactionId) {
-        const result = await geminiService.continueChatStream(
-          text,
-          interactionId,
-          (chunk) => {
-            setMessages((prev) =>
-              prev.map((msg) => (msg.id === modelMsgId ? { ...msg, text: msg.text + chunk } : msg)),
-            );
-          },
-          DEFAULT_MODEL,
-        );
-        if (result.interactionId) {
-          setInteractionId(result.interactionId);
-        }
-      } else {
-        const imagesToAnalyze = items.map((it) => it.croppedDataUrl || it.dataUrl);
-        const result = await geminiService.analyzeImagesStream(
-          imagesToAnalyze,
-          text,
-          (chunk) => {
-            setMessages((prev) =>
-              prev.map((msg) => (msg.id === modelMsgId ? { ...msg, text: msg.text + chunk } : msg)),
-            );
-          },
-          DEFAULT_MODEL,
-        );
-        if (result.interactionId) {
-          setInteractionId(result.interactionId);
-        }
+      const result = interactionId
+        ? await geminiService.continueChatStream(text, interactionId, appendChunk, DEFAULT_MODEL)
+        : await geminiService.analyzeImagesStream(
+            items.map((it) => it.croppedDataUrl || it.dataUrl),
+            text,
+            appendChunk,
+            DEFAULT_MODEL,
+          );
+      if (result.interactionId) {
+        setInteractionId(result.interactionId);
       }
-    } catch (err: any) {
+    } catch (err) {
       setMessages((prev) =>
         prev.map((msg) =>
           msg.id === modelMsgId
-            ? { ...msg, text: `⚠️ エラーが発生しました: ${err.message || String(err)}` }
+            ? { ...msg, text: `⚠️ エラーが発生しました: ${errorMessage(err)}` }
             : msg,
         ),
       );
@@ -407,8 +396,9 @@ export const App: React.FC = () => {
                 onStartScreen={startScreenCapture}
                 onStartCamera={startCameraCapture}
                 onGoToEditing={() => {
-                  if (items.length > 0) {
-                    setSelectedId(items[items.length - 1].id);
+                  const lastItem = items.at(-1);
+                  if (lastItem) {
+                    setSelectedId(lastItem.id);
                     setViewMode("crop");
                   }
                 }}

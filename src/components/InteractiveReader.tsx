@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
 import { FileText, Sparkles, Loader2, Copy, Check, RotateCcw, X } from "lucide-react";
-import { WordDefinition } from "../types.ts";
+import type { WordDefinition } from "../types.ts";
 import { geminiService } from "../services/gemini.ts";
 
 interface InteractiveReaderProps {
@@ -44,7 +44,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
   // Handle word click
   const handleWordClick = useCallback(
     async (word: string, sentenceContext: string, e: React.MouseEvent<HTMLButtonElement>) => {
-      const clean = word.replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, "");
+      const clean = word.replaceAll(/^[^a-zA-Z]+|[^a-zA-Z]+$/gu, "");
       if (!clean) return;
 
       setSelectedWord(clean);
@@ -87,7 +87,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
 
   // Render text with clickable words
   const renderInteractiveText = (text: string) => {
-    const paragraphs = text.split(/\n\s*\n|\n/);
+    const paragraphs = text.split(/\n\s*\n|\n/u);
 
     return paragraphs.map((para, pIdx) => {
       if (!para.trim()) return <div key={pIdx} className="h-3" />;
@@ -106,18 +106,18 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
       }
 
       // Split into words and punctuation
-      const tokens = para.split(/(\s+)/);
+      const tokens = para.split(/(\s+)/u);
 
       return (
         <p key={pIdx} className="my-2 leading-relaxed text-slate-200">
           {tokens.map((token, tIdx) => {
             // Whitespace
-            if (/^\s+$/.test(token)) {
+            if (/^\s+$/u.test(token)) {
               return <span key={tIdx}>{token}</span>;
             }
 
             // Word with potential punctuation: e.g. "word,"
-            const match = token.match(/^([^a-zA-Z]*)([a-zA-Z]+(?:['’-][a-zA-Z]+)*)([^a-zA-Z]*)$/);
+            const match = token.match(/^([^a-zA-Z]*)([a-zA-Z]+(?:['’-][a-zA-Z]+)*)([^a-zA-Z]*)$/u);
             if (!match) {
               return <span key={tIdx}>{token}</span>;
             }
@@ -173,6 +173,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
           {/* Font Size controls */}
           <div className="flex items-center bg-slate-900 border border-slate-800 rounded-md p-0.5 mr-2">
             <button
+              type="button"
               onClick={() => setFontSize("sm")}
               className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${fontSize === "sm" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"}`}
               title="小"
@@ -180,6 +181,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
               小
             </button>
             <button
+              type="button"
               onClick={() => setFontSize("base")}
               className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${fontSize === "base" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"}`}
               title="中"
@@ -187,6 +189,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
               中
             </button>
             <button
+              type="button"
               onClick={() => setFontSize("lg")}
               className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${fontSize === "lg" ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"}`}
               title="大"
@@ -198,6 +201,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
           {ocrText && (
             <>
               <button
+                type="button"
                 onClick={handleCopy}
                 className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition-colors"
                 title="テキストをコピー"
@@ -210,6 +214,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
               </button>
 
               <button
+                type="button"
                 disabled={isOcrLoading}
                 onClick={onExtractOcr}
                 className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition-colors disabled:opacity-50"
@@ -256,6 +261,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
 
             {hasImages && (
               <button
+                type="button"
                 onClick={onExtractOcr}
                 className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
               >
@@ -286,6 +292,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
                 )}
               </div>
               <button
+                type="button"
                 onClick={() => {
                   setSelectedWord(null);
                   setPopoverPos(null);
@@ -319,6 +326,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
 
                 {/* Ask Gemini about this word */}
                 <button
+                  type="button"
                   onClick={() => {
                     onAskAboutWord(definition.word, definition.meaning);
                     setSelectedWord(null);

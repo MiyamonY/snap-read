@@ -9,8 +9,10 @@ export interface CropRect {
 
 export interface CaptureItem {
   id: string;
-  dataUrl: string; // original raw data URL
-  croppedDataUrl?: string; // cropped data URL if cropped
+  /** original raw data URL */
+  dataUrl: string;
+  /** cropped data URL if cropped */
+  croppedDataUrl?: string;
   thumbnailUrl: string;
   source: SourceMode;
   timestamp: number;

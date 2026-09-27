@@ -11,7 +11,7 @@ import {
   Sparkles,
   Loader2,
 } from "lucide-react";
-import { AnalysisPreset, ChatMessage, CaptureItem } from "../types.ts";
+import type { AnalysisPreset, ChatMessage, CaptureItem } from "../types.ts";
 import { PRESET_PROMPTS } from "../services/gemini.ts";
 import { InteractiveReader } from "./InteractiveReader.tsx";
 
@@ -28,6 +28,72 @@ interface AnalysisPanelProps {
   isOcrLoading: boolean;
   onExtractOcr: () => void;
 }
+
+const renderFormattedInline = (text: string) => {
+  const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/gu);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return (
+        <strong key={i} className="font-semibold text-indigo-200">
+          {part.slice(2, -2)}
+        </strong>
+      );
+    }
+    if (part.startsWith("`") && part.endsWith("`")) {
+      return (
+        <code
+          key={i}
+          className="bg-slate-800 text-indigo-300 px-1 py-0.5 rounded text-[11px] font-mono"
+        >
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+    return part;
+  });
+};
+
+const renderMarkdown = (content: string) => {
+  const lines = content.split("\n");
+  return lines.map((line, idx) => {
+    if (line.startsWith("### ")) {
+      return (
+        <h3
+          key={idx}
+          className="text-sm font-bold text-indigo-300 mt-4 mb-1.5 flex items-center gap-1.5"
+        >
+          {line.replace("### ", "")}
+        </h3>
+      );
+    }
+    if (line.startsWith("## ")) {
+      return (
+        <h2
+          key={idx}
+          className="text-base font-bold text-white mt-4 mb-2 pb-1 border-b border-slate-700/60"
+        >
+          {line.replace("## ", "")}
+        </h2>
+      );
+    }
+    if (line.startsWith("- ") || line.startsWith("* ")) {
+      const itemText = line.slice(2);
+      return (
+        <li key={idx} className="ml-4 list-disc text-slate-200 my-1 pl-1 text-xs leading-relaxed">
+          {renderFormattedInline(itemText)}
+        </li>
+      );
+    }
+    if (line.trim() === "") {
+      return <div key={idx} className="h-2" />;
+    }
+    return (
+      <p key={idx} className="text-xs text-slate-200 leading-relaxed my-1">
+        {renderFormattedInline(line)}
+      </p>
+    );
+  });
+};
 
 export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   items,
@@ -88,72 +154,6 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     );
   };
 
-  const renderMarkdown = (content: string) => {
-    const lines = content.split("\n");
-    return lines.map((line, idx) => {
-      if (line.startsWith("### ")) {
-        return (
-          <h3
-            key={idx}
-            className="text-sm font-bold text-indigo-300 mt-4 mb-1.5 flex items-center gap-1.5"
-          >
-            {line.replace("### ", "")}
-          </h3>
-        );
-      }
-      if (line.startsWith("## ")) {
-        return (
-          <h2
-            key={idx}
-            className="text-base font-bold text-white mt-4 mb-2 pb-1 border-b border-slate-700/60"
-          >
-            {line.replace("## ", "")}
-          </h2>
-        );
-      }
-      if (line.startsWith("- ") || line.startsWith("* ")) {
-        const itemText = line.substring(2);
-        return (
-          <li key={idx} className="ml-4 list-disc text-slate-200 my-1 pl-1 text-xs leading-relaxed">
-            {renderFormattedInline(itemText)}
-          </li>
-        );
-      }
-      if (line.trim() === "") {
-        return <div key={idx} className="h-2" />;
-      }
-      return (
-        <p key={idx} className="text-xs text-slate-200 leading-relaxed my-1">
-          {renderFormattedInline(line)}
-        </p>
-      );
-    });
-  };
-
-  const renderFormattedInline = (text: string) => {
-    const parts = text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g);
-    return parts.map((part, i) => {
-      if (part.startsWith("**") && part.endsWith("**")) {
-        return (
-          <strong key={i} className="font-semibold text-indigo-200">
-            {part.slice(2, -2)}
-          </strong>
-        );
-      }
-      if (part.startsWith("`") && part.endsWith("`")) {
-        return (
-          <code
-            key={i}
-            className="bg-slate-800 text-indigo-300 px-1 py-0.5 rounded text-[11px] font-mono"
-          >
-            {part.slice(1, -1)}
-          </code>
-        );
-      }
-      return part;
-    });
-  };
-
   const hasImages = items.length > 0;
 
   return (
@@ -163,6 +163,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
         {/* Left: View Tabs */}
         <div className="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800 space-x-1">
           <button
+            type="button"
             onClick={() => setActiveTab("reader")}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
               activeTab === "reader"
@@ -178,6 +179,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
           </button>
 
           <button
+            type="button"
             onClick={() => setActiveTab("ai")}
             className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
               activeTab === "ai"
@@ -205,6 +207,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
           {hasImages && (
             <button
+              type="button"
               onClick={onReset}
               className="text-slate-400 hover:text-slate-200 p-1.5 rounded-md hover:bg-slate-800 text-xs flex items-center gap-1 transition-colors cursor-pointer"
               title="すべてリセット"
@@ -249,6 +252,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
           {!ocrText && (
             <button
+              type="button"
               disabled={isOcrLoading}
               onClick={onExtractOcr}
               className="flex items-center gap-1 text-[11px] px-2.5 py-1 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-medium shrink-0 ml-2 transition-all cursor-pointer shadow-xs disabled:opacity-50"
@@ -284,6 +288,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                   </span>
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
                     <button
+                      type="button"
                       disabled={isLoading}
                       onClick={() => onExecutePreset("translate", PRESET_PROMPTS.translate)}
                       className="flex flex-col items-start p-3 rounded-xl bg-slate-850 hover:bg-slate-800 border border-slate-800 hover:border-indigo-500/50 text-left transition-all group disabled:opacity-50 cursor-pointer"
@@ -300,6 +305,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     </button>
 
                     <button
+                      type="button"
                       disabled={isLoading}
                       onClick={() => onExecutePreset("grammar", PRESET_PROMPTS.grammar)}
                       className="flex flex-col items-start p-3 rounded-xl bg-slate-850 hover:bg-slate-800 border border-slate-800 hover:border-indigo-500/50 text-left transition-all group disabled:opacity-50 cursor-pointer"
@@ -312,6 +318,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     </button>
 
                     <button
+                      type="button"
                       disabled={isLoading}
                       onClick={() => onExecutePreset("vocab", PRESET_PROMPTS.vocab)}
                       className="flex flex-col items-start p-3 rounded-xl bg-slate-850 hover:bg-slate-800 border border-slate-800 hover:border-indigo-500/50 text-left transition-all group disabled:opacity-50 cursor-pointer"
@@ -324,6 +331,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     </button>
 
                     <button
+                      type="button"
                       disabled={isLoading}
                       onClick={() => onExecutePreset("summary", PRESET_PROMPTS.summary)}
                       className="flex flex-col items-start p-3 rounded-xl bg-slate-850 hover:bg-slate-800 border border-slate-800 hover:border-indigo-500/50 text-left transition-all group disabled:opacity-50 cursor-pointer"
@@ -356,6 +364,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
                       {msg.role === "model" && (
                         <button
+                          type="button"
                           onClick={() => handleCopy(msg.text, index)}
                           className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 transition-colors"
                           title="テキストをコピー"

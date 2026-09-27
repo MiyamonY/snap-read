@@ -1,6 +1,6 @@
 import React from "react";
 import { Plus, Trash2, X } from "lucide-react";
-import { CaptureItem } from "../types.ts";
+import type { CaptureItem } from "../types.ts";
 
 interface ImageTrayProps {
   items: CaptureItem[];
@@ -60,6 +60,7 @@ export const ImageTray: React.FC<ImageTrayProps> = ({
 
               {/* Delete Button on Hover */}
               <button
+                type="button"
                 onClick={(e) => onDelete(item.id, e)}
                 className="absolute top-0.5 right-0.5 p-0.5 bg-black/80 hover:bg-rose-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                 title="この画像を削除"
@@ -72,6 +73,7 @@ export const ImageTray: React.FC<ImageTrayProps> = ({
 
         {/* Add more button */}
         <button
+          type="button"
           onClick={onAddNew}
           className={`shrink-0 w-14 h-14 rounded-lg border-2 border-dashed flex flex-col items-center justify-center transition-all cursor-pointer ${
             isStreaming
@@ -93,6 +95,7 @@ export const ImageTray: React.FC<ImageTrayProps> = ({
         </div>
 
         <button
+          type="button"
           onClick={onClearAll}
           className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
           title="すべての画像をクリア"

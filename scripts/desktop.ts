@@ -70,7 +70,9 @@ async function main() {
     console.log("⏳ サーバーの起動を待機中...");
     let attempts = 0;
     while (!(await isPortOpen()) && attempts < 40) {
-      await new Promise((r) => setTimeout(r, 250));
+      await new Promise((r) => {
+        setTimeout(r, 250);
+      });
       attempts++;
     }
 
@@ -89,11 +91,7 @@ async function main() {
   // Create clean user profile dir for standalone app
   const appDataDir = `/tmp/snapread-desktop-profile`;
 
-  if (!browser) {
-    console.log(`⚠️ Chromium系ブラウザが見つかりませんでした。通常のブラウザで開きます...`);
-    const opener = Deno.build.os === "darwin" ? "open" : "xdg-open";
-    new Deno.Command(opener, { args: [APP_URL] }).spawn();
-  } else {
+  if (browser) {
     console.log(`🖥️ デスクトップアプリウィンドウを起動しています (${browser.bin})...`);
     const appWindow = new Deno.Command(browser.bin, {
       args: [
@@ -110,6 +108,10 @@ async function main() {
 
     // Wait for the desktop app window to close
     await appWindow.status;
+  } else {
+    console.log(`⚠️ Chromium系ブラウザが見つかりませんでした。通常のブラウザで開きます...`);
+    const opener = Deno.build.os === "darwin" ? "open" : "xdg-open";
+    new Deno.Command(opener, { args: [APP_URL] }).spawn();
   }
 
   if (viteProcess) {
@@ -119,5 +121,5 @@ async function main() {
 }
 
 if (import.meta.main) {
-  main();
+  await main();
 }

@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { SourceMode } from "../types.ts";
+import type { SourceMode } from "../types.ts";
+import { errorMessage } from "../utils.ts";
 
 export function useMediaStream() {
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -47,11 +48,11 @@ export function useMediaStream() {
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
       }
-    } catch (err: any) {
-      if (err.name === "NotAllowedError") {
+    } catch (err) {
+      if (err instanceof Error && err.name === "NotAllowedError") {
         setError("画面共有のアクセスがキャンセルまたは拒否されました。");
       } else {
-        setError(`画面キャプチャの開始に失敗しました: ${err.message || String(err)}`);
+        setError(`画面キャプチャの開始に失敗しました: ${errorMessage(err)}`);
       }
       setActiveSource("none");
     }
@@ -85,11 +86,11 @@ export function useMediaStream() {
       if (videoRef.current) {
         videoRef.current.srcObject = mediaStream;
       }
-    } catch (err: any) {
-      if (err.name === "NotAllowedError") {
+    } catch (err) {
+      if (err instanceof Error && err.name === "NotAllowedError") {
         setError("カメラアクセスの許可が得られませんでした。");
       } else {
-        setError(`カメラの起動に失敗しました: ${err.message || String(err)}`);
+        setError(`カメラの起動に失敗しました: ${errorMessage(err)}`);
       }
       setActiveSource("none");
     }

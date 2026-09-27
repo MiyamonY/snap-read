@@ -40,6 +40,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
             <span>Gemini API 設定</span>
           </div>
           <button
+            type="button"
             onClick={onClose}
             className="text-slate-400 hover:text-white p-1 rounded-md hover:bg-slate-800 transition-colors"
           >

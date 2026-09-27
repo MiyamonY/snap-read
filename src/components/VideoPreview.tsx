@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Camera, Monitor, Play, Square, Check } from "lucide-react";
-import { SourceMode } from "../types.ts";
+import type { SourceMode } from "../types.ts";
 
 interface VideoPreviewProps {
   videoRef: React.RefObject<HTMLVideoElement | null>;
@@ -78,6 +78,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
           <div className="flex items-center gap-3 pt-2">
             <button
+              type="button"
               onClick={onStartScreen}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
             >
@@ -85,6 +86,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
               <span>画面共有を開始</span>
             </button>
             <button
+              type="button"
               onClick={onStartCamera}
               className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition-all cursor-pointer"
             >
@@ -99,6 +101,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
       {isStreaming && (
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex items-center gap-3 bg-slate-900/95 backdrop-blur-md px-4 py-2 rounded-full border border-slate-700/80 shadow-2xl z-20">
           <button
+            type="button"
             onClick={handleCaptureClick}
             className="flex items-center gap-2 px-5 py-2 rounded-full bg-gradient-to-r from-indigo-500 to-violet-600 hover:from-indigo-600 hover:to-violet-700 text-white font-medium text-xs shadow-lg shadow-indigo-500/30 transition-all transform hover:scale-105 active:scale-95 cursor-pointer"
           >
@@ -110,6 +113,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
 
           {captureCount > 0 && onGoToEditing && (
             <button
+              type="button"
               onClick={onGoToEditing}
               className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium text-xs shadow-md shadow-emerald-600/20 transition-all cursor-pointer"
             >
@@ -119,6 +123,7 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
           )}
 
           <button
+            type="button"
             onClick={onStop}
             className="flex items-center gap-1.5 px-3 py-2 rounded-full bg-slate-800 hover:bg-rose-500/20 text-slate-300 hover:text-rose-400 text-xs font-medium transition-all cursor-pointer"
             title="ストリームを停止"

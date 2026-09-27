@@ -1,6 +1,6 @@
 import React from "react";
 import { Monitor, Camera, Image, Key, Sparkles, X } from "lucide-react";
-import { SourceMode } from "../types.ts";
+import type { SourceMode } from "../types.ts";
 
 interface HeaderProps {
   activeSource: SourceMode | "none";
@@ -11,6 +11,15 @@ interface HeaderProps {
   hasApiKey: boolean;
 }
 
+const handleCloseWindow = async () => {
+  try {
+    await fetch("/api/shutdown", { method: "POST" });
+  } catch {
+    // Ignore network errors on shutdown
+  }
+  window.close();
+};
+
 export const Header: React.FC<HeaderProps> = ({
   activeSource,
   onSelectScreen,
@@ -20,15 +29,6 @@ export const Header: React.FC<HeaderProps> = ({
   hasApiKey,
 }) => {
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
-
-  const handleCloseWindow = async () => {
-    try {
-      await fetch("/api/shutdown", { method: "POST" });
-    } catch {
-      // Ignore network errors on shutdown
-    }
-    window.close();
-  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -58,6 +58,7 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Source Selection Buttons */}
       <div className="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800/80 space-x-1">
         <button
+          type="button"
           onClick={onSelectScreen}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
             activeSource === "screen"
@@ -71,6 +72,7 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         <button
+          type="button"
           onClick={onSelectCamera}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
             activeSource === "camera"
@@ -84,6 +86,7 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         <button
+          type="button"
           onClick={() => fileInputRef.current?.click()}
           className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 transition-all cursor-pointer"
           title="画像ファイルを選択（複数選択可）"
@@ -105,6 +108,7 @@ export const Header: React.FC<HeaderProps> = ({
       {/* Right Controls: Settings & Window Close */}
       <div className="flex items-center space-x-2">
         <button
+          type="button"
           onClick={onOpenSettings}
           className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border transition-colors cursor-pointer ${
             hasApiKey
@@ -121,6 +125,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Window Close Button */}
         <button
+          type="button"
           onClick={handleCloseWindow}
           className="p-1.5 rounded-md text-slate-400 hover:text-white hover:bg-rose-600 transition-colors cursor-pointer group"
           title="ウィンドウを閉じてアプリを終了"

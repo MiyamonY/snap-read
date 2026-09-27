@@ -1,5 +1,7 @@
 import { GoogleGenAI } from "@google/genai";
-import { AnalysisPreset, WordDefinition } from "../types.ts";
+import type { Interactions } from "@google/genai";
+import type { AnalysisPreset, WordDefinition } from "../types.ts";
+import { errorMessage } from "../utils.ts";
 
 export const DEFAULT_MODEL = "gemini-3.8-flash";
 
@@ -45,6 +47,30 @@ export const PRESET_PROMPTS: Record<AnalysisPreset, string> = {
   custom: "",
 };
 
+/**
+ * ストリーミングイベントからテキスト差分を取り出して連結する
+ */
+async function collectTextStream(
+  stream: AsyncIterable<Interactions.InteractionSSEEvent>,
+  onChunk: (delta: string) => void,
+): Promise<{ fullText: string; interactionId?: string }> {
+  let fullText = "";
+  let interactionId: string | undefined;
+
+  for await (const event of stream) {
+    if ("interaction" in event && event.interaction.id) {
+      interactionId = event.interaction.id;
+    }
+
+    if (event.event_type === "step.delta" && event.delta.type === "text" && event.delta.text) {
+      fullText += event.delta.text;
+      onChunk(event.delta.text);
+    }
+  }
+
+  return { fullText, interactionId };
+}
+
 export class GeminiService {
   private client: GoogleGenAI | null = null;
   private currentApiKey: string = "";
@@ -86,7 +112,7 @@ export class GeminiService {
     }
 
     const imageParts = base64DataUrls.map((url, idx) => {
-      const matches = url.match(/^data:([^;]+);base64,(.+)$/);
+      const matches = url.match(/^data:([^;]+);base64,(.+)$/u);
       if (!matches) {
         throw new Error(`画像 ${idx + 1} のデータ形式が無効です。`);
       }
@@ -102,12 +128,12 @@ export class GeminiService {
         ? "これらの画像に含まれているすべての英文を、画像順・段落順に正確に文字起こし（OCR）してください。挨拶や注釈は含めず、純粋な英文テキストのみ（必要に応じて[画像1]などの見出し）を出力してください。"
         : "この画像に含まれているすべての英文を、元の段落や改行を保ちながら正確に文字起こし（OCR）してください。挨拶や注釈は含めず、純粋な英文テキストのみを出力してください。";
 
-    const interaction = (await this.client.interactions.create({
+    const interaction = await this.client.interactions.create({
       model: modelName,
-      input: [...imageParts, { type: "text", text: prompt }] as any,
-    })) as unknown as { output_text?: string };
+      input: [...imageParts, { type: "text", text: prompt }],
+    });
 
-    return interaction.output_text?.trim() || "";
+    return interaction.output_text?.trim() ?? "";
   }
 
   /**
@@ -121,11 +147,12 @@ export class GeminiService {
     const cleanWord = word
       .trim()
       .toLowerCase()
-      .replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, "");
+      .replaceAll(/^[^a-zA-Z]+|[^a-zA-Z]+$/gu, "");
     const cacheKey = `${cleanWord}__${contextSentence.slice(0, 40)}`;
 
-    if (this.wordCache.has(cacheKey)) {
-      return this.wordCache.get(cacheKey)!;
+    const cached = this.wordCache.get(cacheKey);
+    if (cached) {
+      return cached;
     }
 
     if (!this.client) {
@@ -147,13 +174,13 @@ export class GeminiService {
 文脈（前後の文）: "${contextSentence}"`;
 
     try {
-      const interaction = (await this.client.interactions.create({
+      const interaction = await this.client.interactions.create({
         model: modelName,
         input: prompt,
-      })) as unknown as { output_text?: string };
+      });
 
       const rawText = interaction.output_text?.trim() || "{}";
-      const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+      const jsonMatch = rawText.match(/\{[\s\S]*\}/u);
       const jsonStr = jsonMatch ? jsonMatch[0] : rawText;
       const parsed = JSON.parse(jsonStr);
 
@@ -167,7 +194,7 @@ export class GeminiService {
 
       this.wordCache.set(cacheKey, result);
       return result;
-    } catch (err: any) {
+    } catch (err) {
       console.warn("Failed to lookup word definition:", err);
       return {
         word: cleanWord,
@@ -199,67 +226,35 @@ export class GeminiService {
     }
 
     const imageParts = base64DataUrls.map((url, idx) => {
-      const matches = url.match(/^data:([^;]+);base64,(.+)$/);
+      const matches = url.match(/^data:([^;]+);base64,(.+)$/u);
       if (!matches) {
         throw new Error(`画像 ${idx + 1} のデータ形式が無効です。`);
       }
       return {
-        type: "image",
+        type: "image" as const,
         data: matches[2],
         mime_type: matches[1],
       };
     });
 
-    const inputParts: any[] = [
-      ...imageParts,
-      {
-        type: "text",
-        text: prompt,
-      },
-    ];
-
     try {
-      const requestOptions: any = {
+      const stream = await this.client.interactions.create({
         model: modelName,
-        input: inputParts,
+        input: [...imageParts, { type: "text", text: prompt }],
         stream: true,
-      };
-
-      if (previousInteractionId) {
-        requestOptions.previous_interaction_id = previousInteractionId;
-      }
-
-      const stream = (await this.client.interactions.create(
-        requestOptions,
-      )) as unknown as AsyncIterable<any>;
-
-      let fullText = "";
-      let interactionId: string | undefined = undefined;
-
-      for await (const event of stream) {
-        if (event && "interaction" in event && event.interaction?.id) {
-          interactionId = event.interaction.id;
-        }
-
-        if (event.event_type === "step.delta" && event.delta) {
-          if (event.delta.type === "text" && event.delta.text) {
-            fullText += event.delta.text;
-            onChunk(event.delta.text);
-          }
-        }
-      }
-
-      return { fullText, interactionId };
-    } catch (err: any) {
+        ...(previousInteractionId ? { previous_interaction_id: previousInteractionId } : {}),
+      });
+      return await collectTextStream(stream, onChunk);
+    } catch (err) {
       console.error("Gemini API error:", err);
-      throw new Error(`Gemini API 呼び出しエラー: ${err.message || String(err)}`, { cause: err });
+      throw new Error(`Gemini API 呼び出しエラー: ${errorMessage(err)}`, { cause: err });
     }
   }
 
   /**
    * 単一画像向けラッパー
    */
-  public async analyzeImageStream(
+  public analyzeImageStream(
     base64DataUrl: string,
     prompt: string,
     onChunk: (delta: string) => void,
@@ -289,33 +284,16 @@ export class GeminiService {
     }
 
     try {
-      const stream = (await this.client.interactions.create({
+      const stream = await this.client.interactions.create({
         model: modelName,
         input: prompt,
         previous_interaction_id: previousInteractionId,
         stream: true,
-      })) as unknown as AsyncIterable<any>;
-
-      let fullText = "";
-      let interactionId: string | undefined = undefined;
-
-      for await (const event of stream) {
-        if (event && "interaction" in event && event.interaction?.id) {
-          interactionId = event.interaction.id;
-        }
-
-        if (event.event_type === "step.delta" && event.delta) {
-          if (event.delta.type === "text" && event.delta.text) {
-            fullText += event.delta.text;
-            onChunk(event.delta.text);
-          }
-        }
-      }
-
-      return { fullText, interactionId };
-    } catch (err: any) {
+      });
+      return await collectTextStream(stream, onChunk);
+    } catch (err) {
       console.error("Gemini API continue chat error:", err);
-      throw new Error(`Gemini API 呼び出しエラー: ${err.message || String(err)}`, { cause: err });
+      throw new Error(`Gemini API 呼び出しエラー: ${errorMessage(err)}`, { cause: err });
     }
   }
 }
