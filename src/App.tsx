@@ -15,7 +15,7 @@ import { imageApi, itemImageUrl } from "./services/imageApi.ts";
 import { normalizeOcrText } from "./services/ocrText.ts";
 import { recognizeImages } from "./services/ocrApi.ts";
 import { errorMessage } from "./utils.ts";
-import type { AnalysisPreset, ChatMessage, CaptureItem, Folder } from "./types.ts";
+import type { AnalysisPreset, ChatMessage, CaptureItem, Folder, MainTab } from "./types.ts";
 
 /** AI に送るため、フォルダ内の画像を data URL で取得する */
 const loadImagesForAi = (folder: Folder) =>
@@ -76,6 +76,7 @@ export const App: React.FC = () => {
     () => localStorage.getItem(SIDEBAR_STORAGE_KEY) !== "closed",
   );
   const [notice, setNotice] = useState<string | null>(driveErrorFromUrl);
+  const [activeTab, setActiveTab] = useState<MainTab>("reader");
 
   // OAuth コールバックで付与されたクエリを URL から取り除く
   useEffect(() => {
@@ -271,16 +272,6 @@ export const App: React.FC = () => {
     setViewMode("stream");
   };
 
-  // Reset analysis messages
-  const handleResetAnalysis = () => {
-    updateFolder(folderId, (f) => ({
-      ...f,
-      messages: [],
-      interactionId: undefined,
-      ocrText: "",
-    }));
-  };
-
   // Selected item object
   const currentItem = items.find((it) => it.id === selectedId) || items[0];
 
@@ -380,19 +371,10 @@ export const App: React.FC = () => {
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-slate-950 text-slate-100">
       {/* Top Header */}
       <Header
-        activeSource={activeSource}
-        onSelectScreen={() => {
-          setSidebarOpen(true);
-          startScreenCapture();
-        }}
-        onSelectCamera={() => {
-          setSidebarOpen(true);
-          startCameraCapture();
-        }}
-        onSelectFiles={(files) => {
-          setSidebarOpen(true);
-          handleSelectFiles(files);
-        }}
+        activeTab={activeTab}
+        onChangeTab={setActiveTab}
+        hasOcrText={!!folder.ocrText}
+        vocabularyCount={vocabulary.words.length}
         onOpenSettings={() => setIsApiKeyModalOpen(true)}
         hasApiKey={!!apiKey}
       />
@@ -423,9 +405,7 @@ export const App: React.FC = () => {
             isLoading={folder.isChatLoading}
             onExecutePreset={handleExecutePreset}
             onSendMessage={handleSendMessage}
-            onReset={handleResetAnalysis}
-            selectedId={selectedId}
-            onSelectImage={handleSelectItem}
+            activeTab={activeTab}
             ocrText={folder.ocrText}
             isOcrLoading={folder.isOcrLoading}
             onExtractOcr={handleExtractOcr}
@@ -516,6 +496,7 @@ export const App: React.FC = () => {
                 onStop={stopStream}
                 onStartScreen={startScreenCapture}
                 onStartCamera={startCameraCapture}
+                onSelectFiles={handleSelectFiles}
                 onGoToEditing={() => {
                   const lastItem = items.at(-1);
                   if (lastItem) {

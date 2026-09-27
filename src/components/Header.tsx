@@ -1,13 +1,13 @@
 import React from "react";
-import { Monitor, Camera, Image, Key, Sparkles, X } from "lucide-react";
-import type { SourceMode } from "../types.ts";
+import { BookMarked, BookOpen, Key, Sparkles, X } from "lucide-react";
+import type { MainTab } from "../types.ts";
 import { DriveButton } from "./DriveButton.tsx";
 
 interface HeaderProps {
-  activeSource: SourceMode | "none";
-  onSelectScreen: () => void;
-  onSelectCamera: () => void;
-  onSelectFiles: (files: FileList) => void;
+  activeTab: MainTab;
+  onChangeTab: (tab: MainTab) => void;
+  hasOcrText: boolean;
+  vocabularyCount: number;
   onOpenSettings: () => void;
   hasApiKey: boolean;
 }
@@ -21,23 +21,21 @@ const handleCloseWindow = async () => {
   window.close();
 };
 
+const tabClass = (active: boolean) =>
+  `flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all cursor-pointer ${
+    active
+      ? "bg-indigo-600 text-white shadow-sm"
+      : "text-slate-300 hover:text-white hover:bg-slate-800/60"
+  }`;
+
 export const Header: React.FC<HeaderProps> = ({
-  activeSource,
-  onSelectScreen,
-  onSelectCamera,
-  onSelectFiles,
+  activeTab,
+  onChangeTab,
+  hasOcrText,
+  vocabularyCount,
   onOpenSettings,
   hasApiKey,
 }) => {
-  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      onSelectFiles(e.target.files);
-    }
-    e.target.value = "";
-  };
-
   return (
     <header className="h-14 border-b border-slate-800 bg-slate-900/90 backdrop-blur px-4 flex items-center justify-between shrink-0 select-none z-20">
       {/* Brand */}
@@ -56,54 +54,32 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
       </div>
 
-      {/* Source Selection Buttons */}
+      {/* Main View Tabs */}
       <div className="flex items-center bg-slate-950 p-1 rounded-lg border border-slate-800/80 space-x-1">
         <button
           type="button"
-          onClick={onSelectScreen}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-            activeSource === "screen"
-              ? "bg-indigo-600 text-white shadow-sm"
-              : "text-slate-300 hover:text-white hover:bg-slate-800/60"
-          }`}
-          title="デスクトップ画面やアプリウィンドウを共有"
+          onClick={() => onChangeTab("reader")}
+          className={tabClass(activeTab === "reader")}
         >
-          <Monitor className="w-3.5 h-3.5" />
-          <span>画面共有</span>
+          <BookOpen className="w-3.5 h-3.5" />
+          <span>📖 テキスト読解 & 辞書</span>
+          {hasOcrText && (
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
+          )}
         </button>
-
         <button
           type="button"
-          onClick={onSelectCamera}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-            activeSource === "camera"
-              ? "bg-indigo-600 text-white shadow-sm"
-              : "text-slate-300 hover:text-white hover:bg-slate-800/60"
-          }`}
-          title="Webカメラで紙の本や書類を取り込む"
+          onClick={() => onChangeTab("vocab")}
+          className={tabClass(activeTab === "vocab")}
         >
-          <Camera className="w-3.5 h-3.5" />
-          <span>カメラ</span>
+          <BookMarked className="w-3.5 h-3.5" />
+          <span>単語帳</span>
+          {vocabularyCount > 0 && (
+            <span className="text-[10px] px-1 py-0.2 rounded-full bg-emerald-500/30 text-emerald-200 font-mono">
+              {vocabularyCount}
+            </span>
+          )}
         </button>
-
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 transition-all cursor-pointer"
-          title="画像ファイルを選択（複数選択可）"
-        >
-          <Image className="w-3.5 h-3.5" />
-          <span>ファイル読込</span>
-        </button>
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          multiple
-          className="hidden"
-          onChange={handleFileChange}
-        />
       </div>
 
       {/* Right Controls: Settings & Window Close */}

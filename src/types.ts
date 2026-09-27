@@ -83,3 +83,6 @@ export interface VocabularyEntry {
 
 /** 単語帳への登録リクエスト */
 export type VocabularyInput = Omit<VocabularyEntry, "word" | "addedAt" | "otherFolders">;
+
+/** メイン画面のタブ（テキスト読解 / 単語帳） */
+export type MainTab = "reader" | "vocab";

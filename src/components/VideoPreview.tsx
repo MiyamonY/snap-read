@@ -1,5 +1,5 @@
-import React, { useState } from "react";
-import { Camera, Monitor, Play, Square, Check } from "lucide-react";
+import React, { useRef, useState } from "react";
+import { Camera, Monitor, Play, Square, Check, Image } from "lucide-react";
 import type { SourceMode } from "../types.ts";
 
 interface VideoPreviewProps {
@@ -11,6 +11,7 @@ interface VideoPreviewProps {
   onStop: () => void;
   onStartScreen: () => void;
   onStartCamera: () => void;
+  onSelectFiles: (files: FileList) => void;
   onGoToEditing?: () => void;
   error: string | null;
 }
@@ -24,10 +25,19 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
   onStop,
   onStartScreen,
   onStartCamera,
+  onSelectFiles,
   onGoToEditing,
   error,
 }) => {
   const [isFlashing, setIsFlashing] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0) {
+      onSelectFiles(e.target.files);
+    }
+    e.target.value = "";
+  };
 
   const handleCaptureClick = () => {
     setIsFlashing(true);
@@ -93,6 +103,23 @@ export const VideoPreview: React.FC<VideoPreviewProps> = ({
               <Camera className="w-4 h-4" />
               <span>カメラを開始</span>
             </button>
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700 transition-all cursor-pointer"
+              title="画像ファイルを選択（複数選択可）"
+            >
+              <Image className="w-4 h-4" />
+              <span>ファイルを読込</span>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              multiple
+              className="hidden"
+              onChange={handleFileChange}
+            />
           </div>
         </div>
       )}
