@@ -117,7 +117,7 @@ export const Header: React.FC<HeaderProps> = ({
               ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20"
               : "border-amber-500/50 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 animate-pulse"
           }`}
-          title="Gemini APIキーの設定"
+          title="OpenAI APIキーの設定"
         >
           <Key className="w-3.5 h-3.5" />
           <span>{hasApiKey ? "API設定済" : "APIキー設定"}</span>

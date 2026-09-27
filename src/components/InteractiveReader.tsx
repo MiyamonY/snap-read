@@ -11,7 +11,7 @@ import {
   BookmarkCheck,
 } from "lucide-react";
 import type { VocabularyInput, WordDefinition } from "../types.ts";
-import { geminiService } from "../services/gemini.ts";
+import { aiService, MODEL_LABEL } from "../services/ai.ts";
 import { normalizeOcrText } from "../services/ocrText.ts";
 
 type ColumnCount = 1 | 2 | 4;
@@ -150,7 +150,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
     const seq = lookupSeqRef.current;
     let def: WordDefinition | null = null;
     try {
-      def = await geminiService.lookupWordDefinition(text, context);
+      def = await aiService.lookupWordDefinition(text, context);
     } catch (err) {
       console.error("Lookup error:", err);
     }
@@ -413,7 +413,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
               画像から英文テキストを抽出しています...
             </p>
             <span className="text-[11px] text-slate-500">
-              Gemini 3.8 Flash が段落や文字を高精度OCR認識中
+              {MODEL_LABEL} が段落や文字を高精度OCR認識中
             </span>
           </div>
         ) : ocrText ? (
@@ -535,7 +535,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
                   </button>
                 )}
 
-                {/* Ask Gemini about this word */}
+                {/* Ask AI about this word */}
                 <button
                   type="button"
                   onClick={() => {

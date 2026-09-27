@@ -2,7 +2,7 @@
 
 > Deno + Vite + React + TypeScript で構築された、リアルタイム英文キャプチャ＆AI解析デスクトップアプリケーション。
 
-Webカメラや画面キャプチャ（PDF・英語記事・ゲーム・動画・プレゼン等）の映像を取り込み、Google Gemini の最新モデル **`gemini-3.8-flash`** を用いて、画像内の英文をリアルタイムに翻訳・構文解析・語彙解説・質問応答します。
+Webカメラや画面キャプチャ（PDF・英語記事・ゲーム・動画・プレゼン等）の映像を取り込み、OpenAI の **GPT-6 Luna**（`gpt-6-luna`）を用いて、画像内の英文をリアルタイムに翻訳・構文解析・語彙解説・質問応答します。
 
 ---
 
@@ -20,7 +20,7 @@ Webカメラや画面キャプチャ（PDF・英語記事・ゲーム・動画�
 - 🗂️ **フォルダ管理**: 画像・OCR結果・チャット履歴をフォルダ単位で複数保持（タブで切り替え、ダブルクリックで名前変更）
 - ☁️ **保存 (SQLite + Google ドライブ)**: フォルダやチャット履歴、画像のパスは SQLite に、画像は Google ドライブの `SnapRead/<フォルダ名>/` に保存
 - 📐 **集中読解レイアウト**: 結果とチャット入力欄を左側に広く大きく配置し、右側で取り込みソースや画像トレイを直感操作
-- 🤖 **Gemini 3.8 Flash によるAI解析**:
+- 🤖 **GPT-6 Luna によるAI解析**:
   - 📝 **全文翻訳**: 全ページの自然な日本語訳と原文の対応
   - 🔍 **構文・文法解説**: SVOC構造分解、関係詞・分詞構文・仮定法などのポイント解説
   - 📚 **重要単語・熟語**: 英文内の重要語彙と文脈に応じたニュアンス
@@ -36,7 +36,7 @@ Webカメラや画面キャプチャ（PDF・英語記事・ゲーム・動画�
 - **フロントエンド**: [React 19](https://react.dev/), [TypeScript](https://www.typescriptlang.org/), [Vite 8](https://vite.dev/) (Rolldown)
 - **スタイリング**: [Tailwind CSS v4](https://tailwindcss.com/)
 - **アイコン**: [lucide-react](https://lucide.dev/)
-- **AI SDK**: [@google/genai](https://www.npmjs.com/package/@google/genai) (`gemini-3.8-flash`)
+- **AI SDK**: [openai](https://www.npmjs.com/package/openai)（Responses API、`gpt-6-luna`）
 - **React Compiler**: [oxc-transform-react](https://npmx.dev/package/oxc-transform-react)（Rust 版・実験的）
 - **保存**: SQLite (`node:sqlite`) + Google Drive API（OAuth 2.0 / OIDC）
 
@@ -52,9 +52,9 @@ Webカメラや画面キャプチャ（PDF・英語記事・ゲーム・動画�
 mise install
 ```
 
-### 2. Gemini API キーの設定
+### 2. OpenAI API キーの設定
 
-[Google AI Studio](https://aistudio.google.com/app/apikey) で取得した API キーを設定します。
+[OpenAI Platform](https://platform.openai.com/api-keys) で取得した API キーを設定します。
 
 以下のいずれかの方法で設定可能です：
 
@@ -63,7 +63,7 @@ mise install
 - **方法 B: `.env` ファイルに記述**
   ```bash
   cp .env.example .env
-  # .env を編集して VITE_GEMINI_API_KEY=your_key を設定
+  # .env を編集して VITE_OPENAI_API_KEY=your_key を設定
   ```
 
 ### 3. Google ドライブ連携の設定（任意）

@@ -10,14 +10,14 @@ import { FolderBar } from "./components/FolderBar.tsx";
 import { useMediaStream } from "./hooks/useMediaStream.ts";
 import { useFolders } from "./hooks/useFolders.ts";
 import { useFolderWords } from "./hooks/useFolderWords.ts";
-import { geminiService, DEFAULT_MODEL } from "./services/gemini.ts";
+import { aiService, DEFAULT_MODEL, isResponseId } from "./services/ai.ts";
 import { imageApi, itemImageUrl } from "./services/imageApi.ts";
 import { normalizeOcrText } from "./services/ocrText.ts";
 import { errorMessage } from "./utils.ts";
 import type { AnalysisPreset, ChatMessage, CaptureItem, Folder } from "./types.ts";
 
-/** Gemini に送るため、フォルダ内の画像を data URL で取得する */
-const loadImagesForGemini = (folder: Folder) =>
+/** AI に送るため、フォルダ内の画像を data URL で取得する */
+const loadImagesForAi = (folder: Folder) =>
   Promise.all(folder.items.map((it) => imageApi.fetchAsDataUrl(itemImageUrl(it))));
 
 /** Google ドライブ接続（OAuth コールバック）で失敗した場合のエラー */
@@ -27,6 +27,8 @@ const driveErrorFromUrl = () => {
 };
 
 const SIDEBAR_STORAGE_KEY = "snapread_capture_sidebar";
+/** OpenAI の API キー（Gemini のキーを保存していた snapread_api_key とは別に持つ） */
+const API_KEY_STORAGE_KEY = "snapread_openai_api_key";
 
 const newId = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -35,10 +37,9 @@ export const App: React.FC = () => {
   // API Key state
   const [apiKey, setApiKey] = useState<string>(() => {
     return (
-      localStorage.getItem("snapread_api_key") ||
-      localStorage.getItem("maganize_api_key") ||
-      (import.meta as ImportMeta & { env?: { VITE_GEMINI_API_KEY?: string } }).env
-        ?.VITE_GEMINI_API_KEY ||
+      localStorage.getItem(API_KEY_STORAGE_KEY) ||
+      (import.meta as ImportMeta & { env?: { VITE_OPENAI_API_KEY?: string } }).env
+        ?.VITE_OPENAI_API_KEY ||
       ""
     );
   });
@@ -82,10 +83,10 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  // Initialize Gemini Service when API Key changes
+  // Initialize AI Service when API Key changes
   useEffect(() => {
     if (apiKey) {
-      geminiService.init(apiKey);
+      aiService.init(apiKey);
     }
   }, [apiKey]);
 
@@ -108,8 +109,8 @@ export const App: React.FC = () => {
 
   const handleSaveApiKey = (newKey: string) => {
     setApiKey(newKey);
-    localStorage.setItem("snapread_api_key", newKey);
-    geminiService.init(newKey);
+    localStorage.setItem(API_KEY_STORAGE_KEY, newKey);
+    aiService.init(newKey);
   };
 
   const handleSelectFolder = (id: string) => {
@@ -142,8 +143,8 @@ export const App: React.FC = () => {
     updateFolder(folderId, (f) => ({ ...f, isOcrLoading: true }));
     let ocrText: string;
     try {
-      const images = await loadImagesForGemini(folder);
-      ocrText = normalizeOcrText(await geminiService.extractTextFromImages(images, DEFAULT_MODEL));
+      const images = await loadImagesForAi(folder);
+      ocrText = normalizeOcrText(await aiService.extractTextFromImages(images, DEFAULT_MODEL));
     } catch (err) {
       console.error("OCR extraction failed:", err);
       ocrText = `⚠️ テキスト抽出エラー: ${errorMessage(err)}`;
@@ -328,7 +329,7 @@ export const App: React.FC = () => {
     }));
   };
 
-  // Execute Gemini Preset Analysis (Multiple Images)
+  // Execute AI Preset Analysis (Multiple Images)
   const handleExecutePreset = async (preset: AnalysisPreset, prompt: string) => {
     if (items.length === 0) return;
 
@@ -346,12 +347,7 @@ export const App: React.FC = () => {
     };
 
     await runChat(presetLabels[preset] || prompt, preset, async (onChunk) =>
-      geminiService.analyzeImagesStream(
-        await loadImagesForGemini(folder),
-        prompt,
-        onChunk,
-        DEFAULT_MODEL,
-      ),
+      aiService.analyzeImagesStream(await loadImagesForAi(folder), prompt, onChunk, DEFAULT_MODEL),
     );
   };
 
@@ -364,12 +360,13 @@ export const App: React.FC = () => {
       return;
     }
 
-    const { interactionId } = folder;
+    // Gemini 時代に保存された会話 ID では続けられないため、画像付きで新しく会話を始める
+    const interactionId = isResponseId(folder.interactionId) ? folder.interactionId : undefined;
     await runChat(text, undefined, async (onChunk) =>
       interactionId
-        ? geminiService.continueChatStream(text, interactionId, onChunk, DEFAULT_MODEL)
-        : geminiService.analyzeImagesStream(
-            await loadImagesForGemini(folder),
+        ? aiService.continueChatStream(text, interactionId, onChunk, DEFAULT_MODEL)
+        : aiService.analyzeImagesStream(
+            await loadImagesForAi(folder),
             text,
             onChunk,
             DEFAULT_MODEL,
@@ -415,7 +412,7 @@ export const App: React.FC = () => {
 
       {/* Main Split Layout: Left = Analysis & Results (Large), Right = Capture Source */}
       <div className="flex flex-1 min-h-0">
-        {/* LEFT: Gemini Analysis, Interactive Reader & Results (Larger Area) */}
+        {/* LEFT: AI Analysis, Interactive Reader & Results (Larger Area) */}
         <div className="flex-1 h-full min-w-0 bg-slate-900 border-r border-slate-800">
           <AnalysisPanel
             key={folderId}

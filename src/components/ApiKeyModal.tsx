@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Key, Eye, EyeOff, ExternalLink, Check, X } from "lucide-react";
-import { DEFAULT_MODEL } from "../services/gemini.ts";
+import { DEFAULT_MODEL } from "../services/ai.ts";
 
 interface ApiKeyModalProps {
   isOpen: boolean;
@@ -37,7 +37,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
         <div className="flex items-center justify-between border-b border-slate-800 pb-3">
           <div className="flex items-center gap-2 text-white font-semibold">
             <Key className="w-5 h-5 text-indigo-400" />
-            <span>Gemini API 設定</span>
+            <span>Open AI API 設定</span>
           </div>
           <button
             type="button"
@@ -50,13 +50,13 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
 
         <div className="space-y-4 text-xs text-slate-300 leading-relaxed">
           <p>
-            Google Gemini API
+            Open AI API
             キーを入力してください。設定したキーはブラウザ/ローカルにのみ保存され、外部サーバーには送信されません。
           </p>
 
           <form onSubmit={handleSave} className="space-y-3">
             <label className="block space-y-1.5">
-              <span className="text-slate-400 font-medium">Gemini API Key</span>
+              <span className="text-slate-400 font-medium">Open AI API Key</span>
               <div className="relative flex items-center">
                 <input
                   type={showKey ? "text" : "password"}
@@ -84,7 +84,7 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
               <div className="flex justify-between items-center pt-1 border-t border-slate-800/60">
                 <span>APIキーをお持ちでない場合:</span>
                 <a
-                  href="https://aistudio.google.com/app/apikey"
+                  href="https://platform.openai.com/api-keys"
                   target="_blank"
                   rel="noreferrer"
                   className="text-indigo-400 hover:text-indigo-300 inline-flex items-center gap-1 font-medium"

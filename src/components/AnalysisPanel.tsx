@@ -19,7 +19,7 @@ import type {
   VocabularyEntry,
   VocabularyInput,
 } from "../types.ts";
-import { PRESET_PROMPTS } from "../services/gemini.ts";
+import { MODEL_LABEL, PRESET_PROMPTS } from "../services/ai.ts";
 import { itemImageUrl } from "../services/imageApi.ts";
 import { InteractiveReader } from "./InteractiveReader.tsx";
 import { VocabularyList } from "./VocabularyList.tsx";
@@ -409,7 +409,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                   >
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-[10px] font-mono uppercase tracking-wider font-semibold text-slate-400">
-                        {msg.role === "user" ? "あなた" : "Gemini 3.8 Flash"}
+                        {msg.role === "user" ? "あなた" : MODEL_LABEL}
                       </span>
 
                       {msg.role === "model" && (
@@ -439,8 +439,8 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                     <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
                     <span>
                       {items.length > 1
-                        ? `Geminiが全${items.length}枚の英文を解析中...`
-                        : "Geminiが英文を解析中..."}
+                        ? `${MODEL_LABEL}が全${items.length}枚の英文を解析中...`
+                        : `${MODEL_LABEL}が英文を解析中...`}
                     </span>
                   </div>
                 )}

@@ -39,7 +39,7 @@ export const imageApi = {
     return imageApi.upload(folderId, await (await fetch(dataUrl)).blob());
   },
 
-  /** Gemini へ送るため、保存済みの画像を data URL として取得する */
+  /** AI へ送るため、保存済みの画像を data URL として取得する */
   async fetchAsDataUrl(url: string): Promise<string> {
     return blobToDataUrl(await (await ensureOk(await fetch(url))).blob());
   },
