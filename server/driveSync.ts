@@ -2,6 +2,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import { readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { ImageRow, Store } from "./db.ts";
+import { AuthError } from "./errors.ts";
 import { DriveClient } from "./drive.ts";
 import {
   createAuthRequest,
@@ -134,13 +135,16 @@ export class DriveSync {
     this.store.setSetting(SETTING_EMAIL, null);
   }
 
-  private async getAccessToken(): Promise<string> {
+  /** Google API 用のアクセストークン（必要に応じて更新する）。未接続なら AuthError */
+  async getAccessToken(): Promise<string> {
     if (this.token && this.token.expiresAt - 60_000 > Date.now()) {
       return this.token.accessToken;
     }
     const refreshToken = this.store.getSetting(SETTING_REFRESH_TOKEN);
     if (!this.oauth || !refreshToken) {
-      throw new Error("Google ドライブに接続されていません。");
+      throw new AuthError(
+        "Google アカウントに接続されていません。右上の「Google に接続」から接続してください。",
+      );
     }
     try {
       this.token = await refreshAccessToken(this.oauth, refreshToken);

@@ -51,16 +51,20 @@ export const PRESET_PROMPTS: Record<AnalysisPreset, string> = {
   custom: "",
 };
 
-const OCR_RULES = `出力ルール:
-- 段落の途中の改行（画像内での行の折り返し）は削除し、1つの段落は1行につなげる。1文ごとに改行しない
-- 行末のハイフンで分割された単語は元の1語に戻す（例: "infor-" と "mation" → "information"）
-- 段落と段落、見出しと本文の間は空行（改行2つ）で区切る
-- 記事のタイトル・見出し・リード文・本文のみを出力する。次のものは出力しない:
+/** OCR 結果（Google Cloud Vision）を本文だけに整形するための指示 */
+const OCR_CLEANUP_INSTRUCTIONS = `あなたは OCR 結果の整形係です。雑誌・新聞・Web 記事などの画像を Google Cloud Vision で文字認識したテキストが与えられるので、記事の本文だけを読みやすく整形して出力してください。
+
+ルール:
+- 単語の綴り・語句・語順は変更しない。要約・言い換え・翻訳・補完をしない（OCR の明らかな誤認識も直さない）
+- 段落の途中の改行（行の折り返し）は削除して1つの段落を1行につなげ、1文ごとに改行しない
+- 段落と段落、見出しと本文の間は空行（改行2つ）で区切る。段組みで分断された段落は正しい順につなげる
+- 記事のタイトル・見出し・リード文・本文のみを残す。次のものは削除する:
   - ヘッダー、フッター、ページ番号、柱（ランニングヘッド）、著作権表示
   - 写真や図のキャプション、写真クレジット（例: "ALEX WONG/GETTY"）
   - 雑誌・新聞のコーナー名やセクション名（例: "NEWS, OPINION + ANALYSIS"）、著者名の表記（例: "BY ..."）
   - 広告、ナビゲーションやメニュー、ボタンなどの UI 要素、SNS の共有ボタン、Cookie の案内
-- 挨拶・前置き・注釈・Markdown 記法は付けず、英文テキストのみを出力する`;
+- [画像1] のような見出し行はそのまま残す
+- 前置き・注釈・Markdown 記法は付けず、整形後のテキストのみを出力する`;
 
 const API_KEY_MISSING =
   "OpenAI APIキーが設定されていません。右上の設定ボタンからAPIキーを入力してください。";
@@ -145,36 +149,19 @@ export class AiService {
   }
 
   /**
-   * 画像から英文テキストをOCR文字起こしする
+   * OCR 結果（Google Cloud Vision）から本文以外を除き、段落を整形する（テキストのみを送る）
    */
-  public async extractTextFromImages(
-    base64DataUrls: string[],
-    modelName: string = DEFAULT_MODEL,
-  ): Promise<string> {
+  public async cleanupOcrText(rawText: string, modelName: string = DEFAULT_MODEL): Promise<string> {
     const client = this.requireClient();
-    if (base64DataUrls.length === 0) {
+    if (!rawText.trim()) {
       return "";
     }
-
-    const prompt =
-      base64DataUrls.length > 1
-        ? `これらの画像に含まれている本文の英文を、画像順・段落順に正確に文字起こし（OCR）してください。
-
-${OCR_RULES}
-- 画像ごとに、その画像の本文の前に [画像1] のような見出しを1行で付ける`
-        : `この画像に含まれている本文の英文を、段落順に正確に文字起こし（OCR）してください。
-
-${OCR_RULES}`;
 
     const response = await client.responses.create({
       model: modelName,
       reasoning: { effort: "low" },
-      input: [
-        {
-          role: "user",
-          content: [{ type: "input_text", text: prompt }, ...toImageInputs(base64DataUrls)],
-        },
-      ],
+      instructions: OCR_CLEANUP_INSTRUCTIONS,
+      input: rawText,
     });
 
     return response.output_text.trim();

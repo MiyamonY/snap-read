@@ -37,6 +37,7 @@ Webカメラや画面キャプチャ（PDF・英語記事・ゲーム・動画�
 - **スタイリング**: [Tailwind CSS v4](https://tailwindcss.com/)
 - **アイコン**: [lucide-react](https://lucide.dev/)
 - **AI SDK**: [openai](https://www.npmjs.com/package/openai)（Responses API、`gpt-6-luna`）
+- **OCR**: [Google Cloud Vision API](https://cloud.google.com/vision)（`DOCUMENT_TEXT_DETECTION`）
 - **React Compiler**: [oxc-transform-react](https://npmx.dev/package/oxc-transform-react)（Rust 版・実験的）
 - **保存**: SQLite (`node:sqlite`) + Google Drive API（OAuth 2.0 / OIDC）
 
@@ -66,12 +67,14 @@ mise install
   # .env を編集して VITE_OPENAI_API_KEY=your_key を設定
   ```
 
-### 3. Google ドライブ連携の設定（任意）
+### 3. Google 連携（ドライブ保存・OCR）の設定
 
-未設定の場合、画像はローカル（`data/image-cache/`）にのみ保存されます。設定後に接続すると、それまでの画像もまとめてアップロードされます。
+画像の保存に Google ドライブ、文字認識（OCR）に Google Cloud Vision API を使います。どちらもアプリから Google アカウントに接続（OAuth 2.0 / OIDC）して利用します。読み取った文字は GPT-6 Luna で本文だけに整形します（フッター・キャプション等の除去、段落の結合）。
 
-1. [Google Cloud Console](https://console.cloud.google.com/) でプロジェクトを作成し、**Google Drive API** を有効化
-2. **OAuth 同意画面**を設定（テストユーザーに自分のアカウントを追加）
+未接続の間、画像はローカル（`data/image-cache/`）にのみ保存され、OCR は使えません。接続すると、それまでの画像もまとめてドライブにアップロードされます。
+
+1. [Google Cloud Console](https://console.cloud.google.com/) でプロジェクトを作成し、**Google Drive API** と **Cloud Vision API** を有効化（Cloud Vision は課金の有効化が必要）
+2. **OAuth 同意画面**を設定（テストユーザーに自分のアカウントを追加）し、「データアクセス」で `https://www.googleapis.com/auth/cloud-vision` スコープを追加
 3. **認証情報 → OAuth クライアント ID**（種類: ウェブアプリケーション）を作成し、承認済みのリダイレクト URI に次を追加
    ```
    http://127.0.0.1:5173/api/auth/google/callback
@@ -81,9 +84,9 @@ mise install
    GOOGLE_CLIENT_ID=xxxxxxxx.apps.googleusercontent.com
    GOOGLE_CLIENT_SECRET=xxxxxxxx
    ```
-5. アプリ右上の「Google ドライブに接続」から Google アカウントで認可
+5. アプリ右上の「Google に接続」から Google アカウントで認可（`cloud-vision` スコープを追加する前に接続していた場合は、一度接続を解除して再接続）
 
-スコープは `openid email`（接続中のアカウント表示用）と `drive.file`（このアプリが作成したファイルのみ）です。
+スコープは `openid email`（接続中のアカウント表示用）、`drive.file`（このアプリが作成したファイルのみ）、`cloud-vision`（OCR）です。Cloud Vision の利用料金は、OAuth クライアントを作成したプロジェクトに計上されます。
 
 | 環境変数                                    | 既定値                                           | 説明                     |
 | ------------------------------------------- | ------------------------------------------------ | ------------------------ |

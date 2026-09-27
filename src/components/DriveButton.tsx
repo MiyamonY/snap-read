@@ -5,7 +5,7 @@ import type { DriveStatus } from "../services/driveApi.ts";
 
 const POLL_INTERVAL_MS = 10_000;
 
-/** Google ドライブの接続状態の表示と、接続・接続解除 */
+/** Google アカウント（ドライブ保存・OCR）の接続状態の表示と、接続・接続解除 */
 export const DriveButton: React.FC = () => {
   const [status, setStatus] = useState<DriveStatus | null>(null);
 
@@ -33,7 +33,7 @@ export const DriveButton: React.FC = () => {
     return (
       <span
         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs border border-slate-700 text-slate-500"
-        title=".env に GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET を設定すると Google ドライブに保存できます"
+        title=".env に GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET を設定すると Google ドライブ保存と OCR が使えます"
       >
         <CloudOff className="w-3.5 h-3.5" />
         <span>ローカル保存</span>
@@ -46,10 +46,10 @@ export const DriveButton: React.FC = () => {
       <a
         href={DRIVE_LOGIN_URL}
         className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-xs font-medium border border-sky-500/40 bg-sky-500/10 text-sky-300 hover:bg-sky-500/20 transition-colors"
-        title="画像を Google ドライブの SnapRead フォルダに保存します"
+        title="画像の Google ドライブ保存と、Cloud Vision による OCR に使います"
       >
         <CloudOff className="w-3.5 h-3.5" />
-        <span>Google ドライブに接続</span>
+        <span>Google に接続</span>
       </a>
     );
   }

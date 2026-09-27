@@ -13,6 +13,7 @@ import { useFolderWords } from "./hooks/useFolderWords.ts";
 import { aiService, DEFAULT_MODEL, isResponseId } from "./services/ai.ts";
 import { imageApi, itemImageUrl } from "./services/imageApi.ts";
 import { normalizeOcrText } from "./services/ocrText.ts";
+import { recognizeImages } from "./services/ocrApi.ts";
 import { errorMessage } from "./utils.ts";
 import type { AnalysisPreset, ChatMessage, CaptureItem, Folder } from "./types.ts";
 
@@ -143,8 +144,9 @@ export const App: React.FC = () => {
     updateFolder(folderId, (f) => ({ ...f, isOcrLoading: true }));
     let ocrText: string;
     try {
-      const images = await loadImagesForAi(folder);
-      ocrText = normalizeOcrText(await aiService.extractTextFromImages(images, DEFAULT_MODEL));
+      // Google Cloud Vision で文字認識し、GPT-6 Luna で本文以外を除いて段落を整える
+      const rawText = await recognizeImages(items.map((it) => it.croppedImageId ?? it.imageId));
+      ocrText = normalizeOcrText(await aiService.cleanupOcrText(rawText, DEFAULT_MODEL));
     } catch (err) {
       console.error("OCR extraction failed:", err);
       ocrText = `⚠️ テキスト抽出エラー: ${errorMessage(err)}`;

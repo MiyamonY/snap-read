@@ -1,7 +1,9 @@
 import { Application, createHttpError, isHttpError, Router, Status } from "@oak/oak";
 import type { FolderPatch, VocabularyInput } from "../src/types.ts";
 import type { Store } from "./db.ts";
+import { AuthError } from "./errors.ts";
 import type { DriveSync } from "./driveSync.ts";
+import { recognizeText } from "./vision.ts";
 
 const MAX_IMAGE_BYTES = 30 * 1024 * 1024;
 
@@ -133,6 +135,33 @@ const googleAuthRouter = ({ drive }: ApiDeps) =>
       ctx.response.status = Status.NoContent;
     });
 
+/**
+ * /api/ocr
+ *   POST /  body: { imageIds: string[] } → { text }  保存済みの画像を Cloud Vision で文字認識する
+ */
+const ocrRouter = ({ drive }: ApiDeps) =>
+  new Router({ prefix: "/api/ocr" }).post("/", async (ctx) => {
+    let accessToken: string;
+    try {
+      accessToken = await drive.getAccessToken();
+    } catch (err) {
+      if (err instanceof AuthError) throw createHttpError(Status.Unauthorized, err.message);
+      throw err;
+    }
+    const { imageIds } = (await ctx.request.body.json()) as { imageIds?: string[] };
+    if (!Array.isArray(imageIds) || imageIds.length === 0) {
+      throw createHttpError(Status.BadRequest, "imageIds is required");
+    }
+    const images = await Promise.all(
+      imageIds.map(async (id) => {
+        const image = await drive.readImage(id);
+        if (!image) throw createHttpError(Status.NotFound, `image not found: ${id}`);
+        return image.data;
+      }),
+    );
+    ctx.response.body = { text: await recognizeText(accessToken, images) };
+  });
+
 /** POST /api/shutdown  レスポンスを返してからサーバーを終了する */
 const shutdownRouter = ({ onShutdown }: ApiDeps) =>
   new Router().post("/api/shutdown", (ctx) => {
@@ -161,6 +190,7 @@ export const createApiApp = (deps: ApiDeps): Application => {
     folderRouter(deps),
     imageRouter(deps),
     googleAuthRouter(deps),
+    ocrRouter(deps),
     shutdownRouter(deps),
   ]) {
     app.use(router.routes(), router.allowedMethods());

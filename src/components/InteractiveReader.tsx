@@ -413,7 +413,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
               画像から英文テキストを抽出しています...
             </p>
             <span className="text-[11px] text-slate-500">
-              {MODEL_LABEL} が段落や文字を高精度OCR認識中
+              Cloud Vision で文字を読み取り、{MODEL_LABEL} で本文を整形中
             </span>
           </div>
         ) : ocrText ? (

@@ -4,8 +4,15 @@ const AUTH_ENDPOINT = "https://accounts.google.com/o/oauth2/v2/auth";
 const TOKEN_ENDPOINT = "https://oauth2.googleapis.com/token";
 const REVOKE_ENDPOINT = "https://oauth2.googleapis.com/revoke";
 
-/** OIDC（アカウント表示用）+ アプリが作成したファイルのみ扱える Drive スコープ */
-const SCOPES = ["openid", "email", "https://www.googleapis.com/auth/drive.file"];
+/**
+ * OIDC（アカウント表示用）+ アプリが作成したファイルのみ扱える Drive + Cloud Vision（OCR）
+ */
+const SCOPES = [
+  "openid",
+  "email",
+  "https://www.googleapis.com/auth/drive.file",
+  "https://www.googleapis.com/auth/cloud-vision",
+];
 
 export interface GoogleOAuthConfig {
   clientId: string;
