@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Loader2 } from "lucide-react";
+import { Loader2, PanelRightClose, PanelRightOpen } from "lucide-react";
 import { Header } from "./components/Header.tsx";
 import { VideoPreview } from "./components/VideoPreview.tsx";
 import { ImageCropper } from "./components/ImageCropper.tsx";
@@ -24,6 +24,8 @@ const driveErrorFromUrl = () => {
   const error = new URLSearchParams(globalThis.location.search).get("drive_error");
   return error ? `Google ドライブへの接続に失敗しました: ${error}` : null;
 };
+
+const SIDEBAR_STORAGE_KEY = "snapread_capture_sidebar";
 
 const newId = (prefix: string) =>
   `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
@@ -67,6 +69,9 @@ export const App: React.FC = () => {
   } = useFolders();
   const vocabulary = useFolderWords(folder?.id);
   const [viewMode, setViewMode] = useState<"stream" | "crop">("stream");
+  const [isSidebarOpen, setIsSidebarOpen] = useState(
+    () => localStorage.getItem(SIDEBAR_STORAGE_KEY) !== "closed",
+  );
   const [notice, setNotice] = useState<string | null>(driveErrorFromUrl);
 
   // OAuth コールバックで付与されたクエリを URL から取り除く
@@ -93,6 +98,11 @@ export const App: React.FC = () => {
   }
 
   const folderId = folder.id;
+
+  const setSidebarOpen = (open: boolean) => {
+    setIsSidebarOpen(open);
+    localStorage.setItem(SIDEBAR_STORAGE_KEY, open ? "open" : "closed");
+  };
   const { items, selectedId } = folder;
 
   const handleSaveApiKey = (newKey: string) => {
@@ -371,9 +381,18 @@ export const App: React.FC = () => {
       {/* Top Header */}
       <Header
         activeSource={activeSource}
-        onSelectScreen={startScreenCapture}
-        onSelectCamera={startCameraCapture}
-        onSelectFiles={handleSelectFiles}
+        onSelectScreen={() => {
+          setSidebarOpen(true);
+          startScreenCapture();
+        }}
+        onSelectCamera={() => {
+          setSidebarOpen(true);
+          startCameraCapture();
+        }}
+        onSelectFiles={(files) => {
+          setSidebarOpen(true);
+          handleSelectFiles(files);
+        }}
         onOpenSettings={() => setIsApiKeyModalOpen(true)}
         hasApiKey={!!apiKey}
       />
@@ -422,17 +441,57 @@ export const App: React.FC = () => {
           />
         </div>
 
-        {/* RIGHT: Capture Source & Image Tray (Wider Panel ~480px) */}
-        <div className="w-[480px] max-w-[45vw] h-full flex flex-col bg-slate-950 shrink-0">
-          {/* Folder Tabs */}
-          <FolderBar
-            folders={folders}
-            activeFolderId={folderId}
-            onSelect={handleSelectFolder}
-            onAdd={handleAddFolder}
-            onRename={renameFolder}
-            onDelete={handleDeleteFolder}
-          />
+        {/* RIGHT (collapsed): thin rail to reopen the capture panel */}
+        {!isSidebarOpen && (
+          <div className="w-11 h-full shrink-0 flex flex-col items-center gap-3 py-2 bg-slate-950 border-l border-slate-800">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(true)}
+              title="キャプチャパネルを開く"
+              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <PanelRightOpen className="w-4 h-4" />
+            </button>
+            {isStreaming && (
+              <span
+                className="w-2 h-2 rounded-full bg-rose-500 animate-pulse"
+                title="キャプチャ中"
+              />
+            )}
+            <span className="text-[11px] text-slate-400 [writing-mode:vertical-rl] tracking-wider">
+              {folder.name}・{items.length} 枚
+            </span>
+          </div>
+        )}
+
+        {/* RIGHT: Capture Source & Image Tray (Wider Panel ~480px).
+            閉じている間も映像ストリームを保つため、アンマウントせず非表示にする */}
+        <div
+          className={`w-[480px] max-w-[45vw] h-full flex-col bg-slate-950 shrink-0 ${
+            isSidebarOpen ? "flex" : "hidden"
+          }`}
+        >
+          {/* Collapse button & Folder Tabs */}
+          <div className="flex items-stretch">
+            <button
+              type="button"
+              onClick={() => setSidebarOpen(false)}
+              title="キャプチャパネルを閉じる"
+              className="h-10 px-2.5 shrink-0 border-b border-r border-slate-800 bg-slate-900/90 text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            >
+              <PanelRightClose className="w-4 h-4" />
+            </button>
+            <div className="flex-1 min-w-0">
+              <FolderBar
+                folders={folders}
+                activeFolderId={folderId}
+                onSelect={handleSelectFolder}
+                onAdd={handleAddFolder}
+                onRename={renameFolder}
+                onDelete={handleDeleteFolder}
+              />
+            </div>
+          </div>
 
           {/* Main Visual: Stream or Cropper */}
           <div className="flex-1 relative min-h-0">
