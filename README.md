@@ -17,6 +17,8 @@ Webカメラや画面キャプチャ（PDF・英語記事・ゲーム・動画�
   - 画像内の英文を高精度にテキスト化
   - 気になる英単語をクリックするだけで、文脈に合った日本語の語義（品詞・意味・ニュアンス・発音目安）がその場でポップアップ表示
   - 「この単語について詳しく質問」ボタンでAIチャットにシームレスに深掘り質問
+- 🗂️ **フォルダ管理**: 画像・OCR結果・チャット履歴をフォルダ単位で複数保持（タブで切り替え、ダブルクリックで名前変更）
+- ☁️ **保存 (SQLite + Google ドライブ)**: フォルダやチャット履歴、画像のパスは SQLite に、画像は Google ドライブの `SnapRead/<フォルダ名>/` に保存
 - 📐 **集中読解レイアウト**: 結果とチャット入力欄を左側に広く大きく配置し、右側で取り込みソースや画像トレイを直感操作
 - 🤖 **Gemini 3.8 Flash によるAI解析**:
   - 📝 **全文翻訳**: 全ページの自然な日本語訳と原文の対応
@@ -35,6 +37,8 @@ Webカメラや画面キャプチャ（PDF・英語記事・ゲーム・動画�
 - **スタイリング**: [Tailwind CSS v4](https://tailwindcss.com/)
 - **アイコン**: [lucide-react](https://lucide.dev/)
 - **AI SDK**: [@google/genai](https://www.npmjs.com/package/@google/genai) (`gemini-3.8-flash`)
+- **React Compiler**: [oxc-transform-react](https://npmx.dev/package/oxc-transform-react)（Rust 版・実験的）
+- **保存**: SQLite (`node:sqlite`) + Google Drive API（OAuth 2.0 / OIDC）
 
 ---
 
@@ -62,7 +66,33 @@ mise install
   # .env を編集して VITE_GEMINI_API_KEY=your_key を設定
   ```
 
-### 3. アプリケーションの起動
+### 3. Google ドライブ連携の設定（任意）
+
+未設定の場合、画像はローカル（`data/image-cache/`）にのみ保存されます。設定後に接続すると、それまでの画像もまとめてアップロードされます。
+
+1. [Google Cloud Console](https://console.cloud.google.com/) でプロジェクトを作成し、**Google Drive API** を有効化
+2. **OAuth 同意画面**を設定（テストユーザーに自分のアカウントを追加）
+3. **認証情報 → OAuth クライアント ID**（種類: ウェブアプリケーション）を作成し、承認済みのリダイレクト URI に次を追加
+   ```
+   http://127.0.0.1:5173/api/auth/google/callback
+   ```
+4. `.env` にクライアント ID とシークレットを設定
+   ```bash
+   GOOGLE_CLIENT_ID=xxxxxxxx.apps.googleusercontent.com
+   GOOGLE_CLIENT_SECRET=xxxxxxxx
+   ```
+5. アプリ右上の「Google ドライブに接続」から Google アカウントで認可
+
+スコープは `openid email`（接続中のアカウント表示用）と `drive.file`（このアプリが作成したファイルのみ）です。
+
+| 環境変数                                    | 既定値                                           | 説明                     |
+| ------------------------------------------- | ------------------------------------------------ | ------------------------ |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | なし                                             | OAuth クライアント       |
+| `GOOGLE_REDIRECT_URI`                       | `http://127.0.0.1:5173/api/auth/google/callback` | リダイレクト URI         |
+| `SNAPREAD_DB_PATH`                          | `data/snapread.db`                               | SQLite データベース      |
+| `SNAPREAD_CACHE_DIR`                        | `data/image-cache`                               | 画像のローカルキャッシュ |
+
+### 4. アプリケーションの起動
 
 #### デスクトップアプリモードで起動 (独立ウィンドウ)
 

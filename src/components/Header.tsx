@@ -1,6 +1,7 @@
 import React from "react";
 import { Monitor, Camera, Image, Key, Sparkles, X } from "lucide-react";
 import type { SourceMode } from "../types.ts";
+import { DriveButton } from "./DriveButton.tsx";
 
 interface HeaderProps {
   activeSource: SourceMode | "none";
@@ -107,6 +108,7 @@ export const Header: React.FC<HeaderProps> = ({
 
       {/* Right Controls: Settings & Window Close */}
       <div className="flex items-center space-x-2">
+        <DriveButton />
         <button
           type="button"
           onClick={onOpenSettings}

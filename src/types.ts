@@ -9,11 +9,10 @@ export interface CropRect {
 
 export interface CaptureItem {
   id: string;
-  /** original raw data URL */
-  dataUrl: string;
-  /** cropped data URL if cropped */
-  croppedDataUrl?: string;
-  thumbnailUrl: string;
+  /** original image (served from /api/images/:id) */
+  imageId: string;
+  /** cropped image if cropped */
+  croppedImageId?: string;
   source: SourceMode;
   timestamp: number;
 }
@@ -36,16 +35,34 @@ export interface WordDefinition {
   phonetic?: string;
 }
 
-export interface AppSettings {
-  apiKey: string;
-  model: string;
+export interface Folder {
+  id: string;
+  name: string;
+  createdAt: number;
+  items: CaptureItem[];
+  selectedId: string | null;
+  ocrText: string;
+  isOcrLoading: boolean;
+  messages: ChatMessage[];
+  isChatLoading: boolean;
+  interactionId?: string;
 }
 
-export interface HistoryEntry {
+/** SQLite に保存されるフォルダ（読み込み中などの一時的な状態は含まない） */
+export interface StoredFolder {
   id: string;
-  timestamp: number;
-  thumbnailUrl: string;
-  fullDataUrl: string;
+  name: string;
+  createdAt: number;
+  sortOrder: number;
+  selectedId: string | null;
+  ocrText: string;
+  interactionId?: string;
+  items: CaptureItem[];
   messages: ChatMessage[];
-  presetTitle: string;
 }
+
+/** フォルダの保存リクエスト。items / messages は変更があった場合のみ送る */
+export type FolderPatch = Omit<StoredFolder, "items" | "messages"> & {
+  items?: CaptureItem[];
+  messages?: ChatMessage[];
+};

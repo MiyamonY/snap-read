@@ -1,6 +1,7 @@
 import React from "react";
 import { Plus, Trash2, X } from "lucide-react";
 import type { CaptureItem } from "../types.ts";
+import { itemImageUrl } from "../services/imageApi.ts";
 
 interface ImageTrayProps {
   items: CaptureItem[];
@@ -29,7 +30,7 @@ export const ImageTray: React.FC<ImageTrayProps> = ({
       <div className="flex items-center gap-2.5 overflow-x-auto py-1 scrollbar-thin flex-1 min-w-0 pr-3">
         {items.map((item, index) => {
           const isSelected = item.id === selectedId;
-          const displayUrl = item.croppedDataUrl || item.dataUrl;
+          const displayUrl = itemImageUrl(item);
 
           return (
             <div

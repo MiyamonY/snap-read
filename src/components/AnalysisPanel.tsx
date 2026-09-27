@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import type { AnalysisPreset, ChatMessage, CaptureItem } from "../types.ts";
 import { PRESET_PROMPTS } from "../services/gemini.ts";
+import { itemImageUrl } from "../services/imageApi.ts";
 import { InteractiveReader } from "./InteractiveReader.tsx";
 
 interface AnalysisPanelProps {
@@ -228,7 +229,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             </span>
             {items.map((item, idx) => {
               const isSelected = item.id === selectedId;
-              const src = item.croppedDataUrl || item.dataUrl;
+              const src = itemImageUrl(item);
               return (
                 <button
                   type="button"

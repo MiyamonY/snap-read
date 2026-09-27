@@ -90,10 +90,6 @@ export class GeminiService {
     this.client = new GoogleGenAI({ apiKey });
   }
 
-  public isReady(): boolean {
-    return !!this.client && !!this.currentApiKey;
-  }
-
   /**
    * 画像から英文テキストをOCR文字起こしする
    */
@@ -249,25 +245,6 @@ export class GeminiService {
       console.error("Gemini API error:", err);
       throw new Error(`Gemini API 呼び出しエラー: ${errorMessage(err)}`, { cause: err });
     }
-  }
-
-  /**
-   * 単一画像向けラッパー
-   */
-  public analyzeImageStream(
-    base64DataUrl: string,
-    prompt: string,
-    onChunk: (delta: string) => void,
-    modelName: string = DEFAULT_MODEL,
-    previousInteractionId?: string,
-  ): Promise<{ fullText: string; interactionId?: string }> {
-    return this.analyzeImagesStream(
-      [base64DataUrl],
-      prompt,
-      onChunk,
-      modelName,
-      previousInteractionId,
-    );
   }
 
   /**

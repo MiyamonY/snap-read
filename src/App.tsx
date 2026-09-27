@@ -1,14 +1,31 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
+import { Loader2 } from "lucide-react";
 import { Header } from "./components/Header.tsx";
 import { VideoPreview } from "./components/VideoPreview.tsx";
 import { ImageCropper } from "./components/ImageCropper.tsx";
 import { AnalysisPanel } from "./components/AnalysisPanel.tsx";
 import { ApiKeyModal } from "./components/ApiKeyModal.tsx";
 import { ImageTray } from "./components/ImageTray.tsx";
+import { FolderBar } from "./components/FolderBar.tsx";
 import { useMediaStream } from "./hooks/useMediaStream.ts";
+import { useFolders } from "./hooks/useFolders.ts";
 import { geminiService, DEFAULT_MODEL } from "./services/gemini.ts";
+import { imageApi, itemImageUrl } from "./services/imageApi.ts";
 import { errorMessage } from "./utils.ts";
-import type { AnalysisPreset, ChatMessage, CaptureItem } from "./types.ts";
+import type { AnalysisPreset, ChatMessage, CaptureItem, Folder } from "./types.ts";
+
+/** Gemini に送るため、フォルダ内の画像を data URL で取得する */
+const loadImagesForGemini = (folder: Folder) =>
+  Promise.all(folder.items.map((it) => imageApi.fetchAsDataUrl(itemImageUrl(it))));
+
+/** Google ドライブ接続（OAuth コールバック）で失敗した場合のエラー */
+const driveErrorFromUrl = () => {
+  const error = new URLSearchParams(globalThis.location.search).get("drive_error");
+  return error ? `Google ドライブへの接続に失敗しました: ${error}` : null;
+};
+
+const newId = (prefix: string) =>
+  `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
 
 export const App: React.FC = () => {
   // API Key state
@@ -35,19 +52,27 @@ export const App: React.FC = () => {
     captureFrame,
   } = useMediaStream();
 
-  // Multiple captured images list
-  const [items, setItems] = useState<CaptureItem[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Folders (each holds its own images, OCR text and chat history; persisted in SQLite)
+  const {
+    folders,
+    activeFolder: folder,
+    isLoaded,
+    storageError,
+    updateFolder,
+    addFolder,
+    selectFolder,
+    renameFolder,
+    deleteFolder,
+  } = useFolders();
   const [viewMode, setViewMode] = useState<"stream" | "crop">("stream");
+  const [notice, setNotice] = useState<string | null>(driveErrorFromUrl);
 
-  // OCR state
-  const [ocrText, setOcrText] = useState<string>("");
-  const [isOcrLoading, setIsOcrLoading] = useState(false);
-
-  // Gemini chat state
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [interactionId, setInteractionId] = useState<string | undefined>();
+  // OAuth コールバックで付与されたクエリを URL から取り除く
+  useEffect(() => {
+    if (globalThis.location.search.includes("drive_error")) {
+      globalThis.history.replaceState(null, "", globalThis.location.pathname);
+    }
+  }, []);
 
   // Initialize Gemini Service when API Key changes
   useEffect(() => {
@@ -56,14 +81,44 @@ export const App: React.FC = () => {
     }
   }, [apiKey]);
 
+  if (!isLoaded || !folder) {
+    return (
+      <div className="flex items-center justify-center h-screen w-screen bg-slate-950 text-slate-400 gap-2 text-sm">
+        <Loader2 className="w-5 h-5 animate-spin text-indigo-400" />
+        <span>フォルダを読み込んでいます...</span>
+      </div>
+    );
+  }
+
+  const folderId = folder.id;
+  const { items, selectedId } = folder;
+
   const handleSaveApiKey = (newKey: string) => {
     setApiKey(newKey);
     localStorage.setItem("snapread_api_key", newKey);
     geminiService.init(newKey);
   };
 
+  const handleSelectFolder = (id: string) => {
+    selectFolder(id);
+    const target = folders.find((f) => f.id === id);
+    setViewMode(target && target.items.length > 0 ? "crop" : "stream");
+  };
+
+  const handleAddFolder = () => {
+    addFolder();
+    setViewMode("stream");
+  };
+
+  const handleDeleteFolder = (id: string) => {
+    deleteFolder(id);
+    if (id === folderId) {
+      setViewMode("stream");
+    }
+  };
+
   // OCR Extraction function
-  const handleExtractOcr = useCallback(async () => {
+  const handleExtractOcr = async () => {
     if (items.length === 0) return;
 
     if (!apiKey) {
@@ -71,144 +126,194 @@ export const App: React.FC = () => {
       return;
     }
 
-    setIsOcrLoading(true);
-    const imagesToExtract = items.map((it) => it.croppedDataUrl || it.dataUrl);
-
+    updateFolder(folderId, (f) => ({ ...f, isOcrLoading: true }));
+    let ocrText: string;
     try {
-      const extracted = await geminiService.extractTextFromImages(imagesToExtract, DEFAULT_MODEL);
-      setOcrText(extracted);
+      const images = await loadImagesForGemini(folder);
+      ocrText = await geminiService.extractTextFromImages(images, DEFAULT_MODEL);
     } catch (err) {
       console.error("OCR extraction failed:", err);
-      setOcrText(`⚠️ テキスト抽出エラー: ${errorMessage(err)}`);
+      ocrText = `⚠️ テキスト抽出エラー: ${errorMessage(err)}`;
     }
-    setIsOcrLoading(false);
-  }, [items, apiKey]);
+    updateFolder(folderId, (f) => ({ ...f, ocrText, isOcrLoading: false }));
+  };
+
+  const addItems = (newItems: CaptureItem[]) => {
+    updateFolder(folderId, (f) => ({
+      ...f,
+      items: [...f.items, ...newItems],
+      selectedId: f.selectedId ?? newItems[0]?.id ?? null,
+    }));
+  };
 
   // Capture current video frame into items
-  const handleCapture = useCallback(() => {
+  const handleCapture = async () => {
     const frame = captureFrame();
-    if (frame) {
+    if (!frame) return;
+    try {
+      const imageId = await imageApi.uploadDataUrl(folderId, frame);
       const newItem: CaptureItem = {
-        id: `cap-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-        dataUrl: frame,
-        thumbnailUrl: frame,
+        id: newId("cap"),
+        imageId,
         source: activeSource === "none" ? "screen" : activeSource,
         timestamp: Date.now(),
       };
-
-      setItems((prev) => [...prev, newItem]);
-      setSelectedId(newItem.id);
+      addItems([newItem]);
+      updateFolder(folderId, (f) => ({ ...f, selectedId: newItem.id }));
+    } catch (err) {
+      setNotice(`画像の保存に失敗しました: ${errorMessage(err)}`);
     }
-  }, [captureFrame, activeSource]);
+  };
 
   // Load images from file input
-  const handleSelectFiles = useCallback(
-    (fileList: FileList) => {
-      const fileArray = Array.from(fileList);
-      if (fileArray.length === 0) return;
-
-      fileArray.forEach((file, index) => {
-        const reader = new FileReader();
-        reader.addEventListener("load", (event) => {
-          const dataUrl = event.target?.result as string;
-          if (dataUrl) {
-            const newItem: CaptureItem = {
-              id: `file-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 6)}`,
-              dataUrl,
-              thumbnailUrl: dataUrl,
-              source: "file",
-              timestamp: Date.now(),
-            };
-            setItems((prev) => {
-              const next = [...prev, newItem];
-              if (!selectedId) {
-                setSelectedId(newItem.id);
-              }
-              return next;
-            });
-            setViewMode("crop");
-          }
-        });
-        reader.readAsDataURL(file);
-      });
-    },
-    [selectedId],
-  );
+  const handleSelectFiles = async (fileList: FileList) => {
+    const files = Array.from(fileList).filter((file) => file.type.startsWith("image/"));
+    if (files.length === 0) return;
+    try {
+      const imageIds = await Promise.all(files.map((file) => imageApi.upload(folderId, file)));
+      addItems(
+        imageIds.map((imageId) => ({
+          id: newId("file"),
+          imageId,
+          source: "file",
+          timestamp: Date.now(),
+        })),
+      );
+      setViewMode("crop");
+    } catch (err) {
+      setNotice(`画像の保存に失敗しました: ${errorMessage(err)}`);
+    }
+  };
 
   // Select an item to view / crop
-  const handleSelectItem = useCallback((id: string) => {
-    setSelectedId(id);
+  const handleSelectItem = (id: string) => {
+    updateFolder(folderId, (f) => ({ ...f, selectedId: id }));
     setViewMode("crop");
-  }, []);
+  };
 
   // Delete an item
-  const handleDeleteItem = useCallback(
-    (id: string, e?: React.MouseEvent) => {
-      if (e) e.stopPropagation();
-      setItems((prev) => {
-        const filtered = prev.filter((item) => item.id !== id);
-        if (selectedId === id) {
-          setSelectedId(filtered.at(-1)?.id ?? null);
-          if (filtered.length === 0) {
-            setViewMode("stream");
-            setOcrText("");
-          }
-        }
-        return filtered;
-      });
-    },
-    [selectedId],
-  );
+  const handleDeleteItem = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const remaining = items.filter((item) => item.id !== id);
+    updateFolder(folderId, (f) => {
+      const filtered = f.items.filter((item) => item.id !== id);
+      return {
+        ...f,
+        items: filtered,
+        selectedId: f.selectedId === id ? (filtered.at(-1)?.id ?? null) : f.selectedId,
+        ocrText: filtered.length === 0 ? "" : f.ocrText,
+      };
+    });
+    if (remaining.length === 0) {
+      setViewMode("stream");
+    }
+  };
 
-  // Clear all items
-  const handleClearAll = useCallback(() => {
-    setItems([]);
-    setSelectedId(null);
+  // Clear all items in the current folder
+  const handleClearAll = () => {
+    updateFolder(folderId, (f) => ({
+      ...f,
+      items: [],
+      selectedId: null,
+      ocrText: "",
+      messages: [],
+      interactionId: undefined,
+    }));
     setViewMode("stream");
-    setOcrText("");
-    setMessages([]);
-    setInteractionId(undefined);
-  }, []);
+  };
 
   // Apply crop to currently selected item
-  const handleApplyCropToCurrent = useCallback(
-    (croppedDataUrl: string) => {
-      if (!selectedId) return;
-      setItems((prev) =>
-        prev.map((item) => (item.id === selectedId ? { ...item, croppedDataUrl } : item)),
-      );
-    },
-    [selectedId],
-  );
+  const handleApplyCropToCurrent = async (croppedDataUrl: string | null) => {
+    if (!selectedId || !croppedDataUrl) return;
+    try {
+      const croppedImageId = await imageApi.uploadDataUrl(folderId, croppedDataUrl);
+      updateFolder(folderId, (f) => ({
+        ...f,
+        items: f.items.map((item) => (item.id === selectedId ? { ...item, croppedImageId } : item)),
+      }));
+    } catch (err) {
+      setNotice(`切り抜き画像の保存に失敗しました: ${errorMessage(err)}`);
+    }
+  };
 
   // Navigate between images
   const currentIndex = items.findIndex((it) => it.id === selectedId);
-  const handlePrevItem = useCallback(() => {
+  const handlePrevItem = () => {
     if (currentIndex > 0) {
-      setSelectedId(items[currentIndex - 1].id);
+      handleSelectItem(items[currentIndex - 1].id);
     }
-  }, [currentIndex, items]);
+  };
 
-  const handleNextItem = useCallback(() => {
+  const handleNextItem = () => {
     if (currentIndex >= 0 && currentIndex < items.length - 1) {
-      setSelectedId(items[currentIndex + 1].id);
+      handleSelectItem(items[currentIndex + 1].id);
     }
-  }, [currentIndex, items]);
+  };
 
   // Return to stream view to capture more
-  const handleAddMore = useCallback(() => {
+  const handleAddMore = () => {
     setViewMode("stream");
-  }, []);
+  };
 
   // Reset analysis messages
-  const handleResetAnalysis = useCallback(() => {
-    setMessages([]);
-    setInteractionId(undefined);
-    setOcrText("");
-  }, []);
+  const handleResetAnalysis = () => {
+    updateFolder(folderId, (f) => ({
+      ...f,
+      messages: [],
+      interactionId: undefined,
+      ocrText: "",
+    }));
+  };
 
   // Selected item object
   const currentItem = items.find((it) => it.id === selectedId) || items[0];
+
+  /** ユーザーメッセージと空のモデル応答を追加し、応答をストリーミングで書き込む */
+  const runChat = async (
+    userText: string,
+    preset: AnalysisPreset | undefined,
+    request: (onChunk: (chunk: string) => void) => Promise<{ interactionId?: string }>,
+  ) => {
+    const userMsg: ChatMessage = {
+      id: `user-${Date.now()}`,
+      role: "user",
+      text: userText,
+      timestamp: Date.now(),
+      preset,
+    };
+    const modelMsgId = `model-${Date.now()}`;
+    const updateModelText = (update: (text: string) => string) => {
+      updateFolder(folderId, (f) => ({
+        ...f,
+        messages: f.messages.map((msg) =>
+          msg.id === modelMsgId ? { ...msg, text: update(msg.text) } : msg,
+        ),
+      }));
+    };
+
+    updateFolder(folderId, (f) => ({
+      ...f,
+      isChatLoading: true,
+      messages: [
+        ...f.messages,
+        userMsg,
+        { id: modelMsgId, role: "model", text: "", timestamp: Date.now() },
+      ],
+    }));
+
+    let interactionId: string | undefined;
+    try {
+      ({ interactionId } = await request((chunk) => updateModelText((text) => text + chunk)));
+    } catch (err) {
+      const message = errorMessage(err);
+      updateModelText(() => `⚠️ エラーが発生しました: ${message}`);
+    }
+    updateFolder(folderId, (f) => ({
+      ...f,
+      isChatLoading: false,
+      interactionId: interactionId ?? f.interactionId,
+    }));
+  };
 
   // Execute Gemini Preset Analysis (Multiple Images)
   const handleExecutePreset = async (preset: AnalysisPreset, prompt: string) => {
@@ -219,10 +324,6 @@ export const App: React.FC = () => {
       return;
     }
 
-    setIsLoading(true);
-    const userMsgId = `user-${Date.now()}`;
-    const modelMsgId = `model-${Date.now()}`;
-
     const presetLabels: Record<AnalysisPreset, string> = {
       translate: items.length > 1 ? `📝 全 ${items.length} 枚を一括翻訳` : "📝 全文翻訳を実行",
       grammar: "🔍 構文・文法解説を実行",
@@ -231,49 +332,14 @@ export const App: React.FC = () => {
       custom: prompt,
     };
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: userMsgId,
-        role: "user",
-        text: presetLabels[preset] || prompt,
-        timestamp: Date.now(),
-        preset,
-      },
-      {
-        id: modelMsgId,
-        role: "model",
-        text: "",
-        timestamp: Date.now(),
-      },
-    ]);
-
-    const imagesToAnalyze = items.map((it) => it.croppedDataUrl || it.dataUrl);
-
-    try {
-      const result = await geminiService.analyzeImagesStream(
-        imagesToAnalyze,
+    await runChat(presetLabels[preset] || prompt, preset, async (onChunk) =>
+      geminiService.analyzeImagesStream(
+        await loadImagesForGemini(folder),
         prompt,
-        (chunk) => {
-          setMessages((prev) =>
-            prev.map((msg) => (msg.id === modelMsgId ? { ...msg, text: msg.text + chunk } : msg)),
-          );
-        },
+        onChunk,
         DEFAULT_MODEL,
-      );
-
-      if (result.interactionId) {
-        setInteractionId(result.interactionId);
-      }
-    } catch (err) {
-      const message = errorMessage(err);
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === modelMsgId ? { ...msg, text: `⚠️ エラーが発生しました: ${message}` } : msg,
-        ),
-      );
-    }
-    setIsLoading(false);
+      ),
+    );
   };
 
   // Follow-up chat message
@@ -285,55 +351,17 @@ export const App: React.FC = () => {
       return;
     }
 
-    setIsLoading(true);
-    const userMsgId = `user-${Date.now()}`;
-    const modelMsgId = `model-${Date.now()}`;
-
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: userMsgId,
-        role: "user",
-        text,
-        timestamp: Date.now(),
-      },
-      {
-        id: modelMsgId,
-        role: "model",
-        text: "",
-        timestamp: Date.now(),
-      },
-    ]);
-
-    const appendChunk = (chunk: string) => {
-      setMessages((prev) =>
-        prev.map((msg) => (msg.id === modelMsgId ? { ...msg, text: msg.text + chunk } : msg)),
-      );
-    };
-
-    const request = interactionId
-      ? geminiService.continueChatStream(text, interactionId, appendChunk, DEFAULT_MODEL)
-      : geminiService.analyzeImagesStream(
-          items.map((it) => it.croppedDataUrl || it.dataUrl),
-          text,
-          appendChunk,
-          DEFAULT_MODEL,
-        );
-
-    try {
-      const result = await request;
-      if (result.interactionId) {
-        setInteractionId(result.interactionId);
-      }
-    } catch (err) {
-      const message = errorMessage(err);
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === modelMsgId ? { ...msg, text: `⚠️ エラーが発生しました: ${message}` } : msg,
-        ),
-      );
-    }
-    setIsLoading(false);
+    const { interactionId } = folder;
+    await runChat(text, undefined, async (onChunk) =>
+      interactionId
+        ? geminiService.continueChatStream(text, interactionId, onChunk, DEFAULT_MODEL)
+        : geminiService.analyzeImagesStream(
+            await loadImagesForGemini(folder),
+            text,
+            onChunk,
+            DEFAULT_MODEL,
+          ),
+    );
   };
 
   return (
@@ -348,32 +376,58 @@ export const App: React.FC = () => {
         hasApiKey={!!apiKey}
       />
 
+      {(storageError || notice) && (
+        <div className="px-4 py-1.5 bg-rose-950/60 border-b border-rose-900 text-xs text-rose-200 shrink-0 flex items-center justify-between gap-2">
+          <span>⚠️ {notice ?? storageError}</span>
+          {notice && (
+            <button
+              type="button"
+              onClick={() => setNotice(null)}
+              className="text-rose-300 hover:text-white cursor-pointer"
+            >
+              閉じる
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Main Split Layout: Left = Analysis & Results (Large), Right = Capture Source */}
       <div className="flex flex-1 min-h-0">
         {/* LEFT: Gemini Analysis, Interactive Reader & Results (Larger Area) */}
         <div className="flex-1 h-full min-w-0 bg-slate-900 border-r border-slate-800">
           <AnalysisPanel
+            key={folderId}
             items={items}
-            messages={messages}
-            isLoading={isLoading}
+            messages={folder.messages}
+            isLoading={folder.isChatLoading}
             onExecutePreset={handleExecutePreset}
             onSendMessage={handleSendMessage}
             onReset={handleResetAnalysis}
             selectedId={selectedId}
             onSelectImage={handleSelectItem}
-            ocrText={ocrText}
-            isOcrLoading={isOcrLoading}
+            ocrText={folder.ocrText}
+            isOcrLoading={folder.isOcrLoading}
             onExtractOcr={handleExtractOcr}
           />
         </div>
 
         {/* RIGHT: Capture Source & Image Tray (Wider Panel ~480px) */}
         <div className="w-[480px] max-w-[45vw] h-full flex flex-col bg-slate-950 shrink-0">
+          {/* Folder Tabs */}
+          <FolderBar
+            folders={folders}
+            activeFolderId={folderId}
+            onSelect={handleSelectFolder}
+            onAdd={handleAddFolder}
+            onRename={renameFolder}
+            onDelete={handleDeleteFolder}
+          />
+
           {/* Main Visual: Stream or Cropper */}
           <div className="flex-1 relative min-h-0">
             {viewMode === "crop" && currentItem ? (
               <ImageCropper
-                imageDataUrl={currentItem.croppedDataUrl || currentItem.dataUrl}
+                imageUrl={itemImageUrl(currentItem)}
                 currentIndex={Math.max(0, currentIndex)}
                 totalCount={items.length}
                 onApplyCropToCurrent={handleApplyCropToCurrent}
@@ -395,8 +449,7 @@ export const App: React.FC = () => {
                 onGoToEditing={() => {
                   const lastItem = items.at(-1);
                   if (lastItem) {
-                    setSelectedId(lastItem.id);
-                    setViewMode("crop");
+                    handleSelectItem(lastItem.id);
                   }
                 }}
                 error={mediaError}

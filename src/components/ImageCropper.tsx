@@ -3,10 +3,11 @@ import { Crop, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import type { CropRect } from "../types.ts";
 
 interface ImageCropperProps {
-  imageDataUrl: string;
+  imageUrl: string;
   currentIndex: number;
   totalCount: number;
-  onApplyCropToCurrent: (croppedDataUrl: string) => void;
+  /** 切り抜いた画像の data URL（範囲未選択で適用した場合は null） */
+  onApplyCropToCurrent: (croppedDataUrl: string | null) => void;
   onAddMore: () => void;
   onPrev: () => void;
   onNext: () => void;
@@ -14,7 +15,7 @@ interface ImageCropperProps {
 }
 
 export const ImageCropper: React.FC<ImageCropperProps> = ({
-  imageDataUrl,
+  imageUrl,
   currentIndex,
   totalCount,
   onApplyCropToCurrent,
@@ -31,9 +32,9 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
   const [cropRect, setCropRect] = useState<CropRect | null>(null);
 
   // Reset crop when image changes
-  const [prevImageDataUrl, setPrevImageDataUrl] = useState(imageDataUrl);
-  if (prevImageDataUrl !== imageDataUrl) {
-    setPrevImageDataUrl(imageDataUrl);
+  const [prevImageUrl, setPrevImageUrl] = useState(imageUrl);
+  if (prevImageUrl !== imageUrl) {
+    setPrevImageUrl(imageUrl);
     setCropRect(null);
   }
 
@@ -80,7 +81,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
     const img = imageRef.current;
 
     if (!cropRect || cropRect.width < 10 || cropRect.height < 10) {
-      onApplyCropToCurrent(imageDataUrl);
+      onApplyCropToCurrent(null);
       return;
     }
 
@@ -114,7 +115,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
     const croppedDataUrl = canvas.toDataURL("image/jpeg", 0.95);
     onApplyCropToCurrent(croppedDataUrl);
     setCropRect(null);
-  }, [cropRect, imageDataUrl, onApplyCropToCurrent]);
+  }, [cropRect, onApplyCropToCurrent]);
 
   return (
     <div
@@ -167,7 +168,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
       >
         <img
           ref={imageRef}
-          src={imageDataUrl}
+          src={imageUrl}
           alt={`Captured frame ${currentIndex + 1}`}
           className="max-h-[calc(100vh-170px)] max-w-full object-contain pointer-events-none rounded-lg shadow-2xl border border-slate-800"
           draggable={false}
