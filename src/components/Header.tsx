@@ -4,7 +4,6 @@ import { SourceMode } from "../types.ts";
 
 interface HeaderProps {
   activeSource: SourceMode | "none";
-  captureCount: number;
   onSelectScreen: () => void;
   onSelectCamera: () => void;
   onSelectFiles: (files: FileList) => void;
@@ -14,7 +13,6 @@ interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({
   activeSource,
-  captureCount,
   onSelectScreen,
   onSelectCamera,
   onSelectFiles,

@@ -18,11 +18,7 @@ const shutdownPlugin = (): Plugin => ({
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [
-    tailwindcss(),
-    react(),
-    shutdownPlugin(),
-  ],
+  plugins: [tailwindcss(), react(), shutdownPlugin()],
   server: {
     host: "127.0.0.1",
     port: 5173,

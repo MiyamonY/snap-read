@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Camera, Monitor, Play, Square, Check, ArrowRight } from "lucide-react";
+import { Camera, Monitor, Play, Square, Check } from "lucide-react";
 import { SourceMode } from "../types.ts";
 
 interface VideoPreviewProps {

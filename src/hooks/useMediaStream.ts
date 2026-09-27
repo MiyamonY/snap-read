@@ -24,7 +24,9 @@ export function useMediaStream() {
 
     try {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-        throw new Error("お使いの環境では画面キャプチャ (getDisplayMedia) がサポートされていません。");
+        throw new Error(
+          "お使いの環境では画面キャプチャ (getDisplayMedia) がサポートされていません。",
+        );
       }
 
       const mediaStream = await navigator.mediaDevices.getDisplayMedia({

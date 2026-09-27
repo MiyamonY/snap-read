@@ -1,18 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import {
-  FileText,
-  Sparkles,
-  Loader2,
-  Copy,
-  Check,
-  RotateCcw,
-  Volume2,
-  ExternalLink,
-  HelpCircle,
-  X,
-  AArrowDown,
-  AArrowUp,
-} from "lucide-react";
+import { FileText, Sparkles, Loader2, Copy, Check, RotateCcw, X } from "lucide-react";
 import { WordDefinition } from "../types.ts";
 import { geminiService } from "../services/gemini.ts";
 
@@ -56,7 +43,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
 
   // Handle word click
   const handleWordClick = useCallback(
-    async (word: string, sentenceContext: string, e: React.MouseEvent<HTMLSpanElement>) => {
+    async (word: string, sentenceContext: string, e: React.MouseEvent<HTMLButtonElement>) => {
       const clean = word.replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, "");
       if (!clean) return;
 
@@ -68,9 +55,14 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
 
       // Position above word by default, or below if too close to top
       const top = rect.top - containerRect.top + (containerRef.current?.scrollTop || 0);
-      const left = rect.left - containerRect.left + (containerRef.current?.scrollLeft || 0) + rect.width / 2;
+      const left =
+        rect.left - containerRect.left + (containerRef.current?.scrollLeft || 0) + rect.width / 2;
 
-      setPopoverPos({ top, left });
+      const containerWidth = containerRef.current?.clientWidth || 300;
+      setPopoverPos({
+        top: Math.max(10, top - 130),
+        left: Math.max(10, Math.min(left - 144, containerWidth - 290)),
+      });
       setIsLookingUp(true);
       setDefinition(null);
 
@@ -83,7 +75,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
         setIsLookingUp(false);
       }
     },
-    []
+    [],
   );
 
   const handleCopy = () => {
@@ -103,7 +95,10 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
       // Header detection like [画像1]
       if (para.startsWith("[") && para.endsWith("]")) {
         return (
-          <div key={pIdx} className="text-xs font-mono font-bold text-indigo-400 mt-4 mb-1.5 flex items-center gap-1.5">
+          <div
+            key={pIdx}
+            className="text-xs font-mono font-bold text-indigo-400 mt-4 mb-1.5 flex items-center gap-1.5"
+          >
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
             {para}
           </div>
@@ -135,7 +130,8 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
             return (
               <React.Fragment key={tIdx}>
                 {prefix}
-                <span
+                <button
+                  type="button"
                   onClick={(e) => handleWordClick(word, para, e)}
                   className={`interactive-word inline-block cursor-pointer rounded px-0.5 transition-all select-text ${
                     isSelected
@@ -145,7 +141,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
                   title="クリックして日本語の語義を表示"
                 >
                   {word}
-                </span>
+                </button>
                 {suffix}
               </React.Fragment>
             );
@@ -206,7 +202,11 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
                 className="p-1 hover:bg-slate-800 rounded text-slate-400 hover:text-white transition-colors"
                 title="テキストをコピー"
               >
-                {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? (
+                  <Check className="w-3.5 h-3.5 text-emerald-400" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
               </button>
 
               <button
@@ -227,8 +227,12 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
         {isOcrLoading ? (
           <div className="flex flex-col items-center justify-center h-48 space-y-3 text-center">
             <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
-            <p className="text-xs text-slate-300 font-medium">画像から英文テキストを抽出しています...</p>
-            <span className="text-[11px] text-slate-500">Gemini 3.8 Flash が段落や文字を高精度OCR認識中</span>
+            <p className="text-xs text-slate-300 font-medium">
+              画像から英文テキストを抽出しています...
+            </p>
+            <span className="text-[11px] text-slate-500">
+              Gemini 3.8 Flash が段落や文字を高精度OCR認識中
+            </span>
           </div>
         ) : ocrText ? (
           <div className="font-sans antialiased max-w-none select-text">
@@ -241,7 +245,9 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
             </div>
             <div>
               <p className="text-xs font-medium text-slate-200">
-                {hasImages ? "画像からテキスト（OCR）を抽出できます" : "まず右側で画像をキャプチャしてください"}
+                {hasImages
+                  ? "画像からテキスト（OCR）を抽出できます"
+                  : "まず右側で画像をキャプチャしてください"}
               </p>
               <p className="text-[11px] text-slate-400 mt-1 max-w-sm">
                 文字化された英文は、分からない単語をクリックするだけで文脈に合った日本語の語義がポップアップ表示されます。
@@ -265,8 +271,8 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
           <div
             className="word-popover absolute z-30 w-72 bg-slate-900 border border-indigo-500/50 rounded-xl p-3.5 shadow-2xl animate-in fade-in zoom-in-95 duration-100"
             style={{
-              top: `${Math.max(10, popoverPos.top - 130)}px`,
-              left: `${Math.max(10, Math.min(popoverPos.left - 144, (containerRef.current?.clientWidth || 300) - 290))}px`,
+              top: `${popoverPos.top}px`,
+              left: `${popoverPos.left}px`,
             }}
           >
             {/* Header: Word & Close */}
@@ -274,7 +280,9 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
               <div className="flex items-center gap-1.5">
                 <span className="font-bold text-white text-sm">{selectedWord}</span>
                 {definition?.phonetic && (
-                  <span className="text-[10px] font-mono text-slate-400">/{definition.phonetic}/</span>
+                  <span className="text-[10px] font-mono text-slate-400">
+                    /{definition.phonetic}/
+                  </span>
                 )}
               </div>
               <button
@@ -300,9 +308,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
                   <span className="bg-indigo-500/20 text-indigo-300 text-[10px] font-semibold px-1.5 py-0.5 rounded">
                     {definition.partOfSpeech}
                   </span>
-                  <span className="text-white font-semibold text-sm">
-                    {definition.meaning}
-                  </span>
+                  <span className="text-white font-semibold text-sm">{definition.meaning}</span>
                 </div>
 
                 {definition.detail && (

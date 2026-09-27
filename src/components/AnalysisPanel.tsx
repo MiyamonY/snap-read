@@ -10,7 +10,6 @@ import {
   RotateCcw,
   Sparkles,
   Loader2,
-  Images,
 } from "lucide-react";
 import { AnalysisPreset, ChatMessage, CaptureItem } from "../types.ts";
 import { PRESET_PROMPTS } from "../services/gemini.ts";
@@ -43,23 +42,29 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   isOcrLoading,
   onExtractOcr,
 }) => {
-  const [activeTab, setActiveTab] = useState<"reader" | "ai">("reader");
+  const [activeTab, setActiveTab] = useState<"reader" | "ai">(() =>
+    messages.length > 0 ? "ai" : "reader",
+  );
   const [inputText, setInputText] = useState("");
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
   // Auto switch to AI tab when a preset is executed or messages arrive
-  useEffect(() => {
+  const [prevMessageCount, setPrevMessageCount] = useState(messages.length);
+  if (prevMessageCount !== messages.length) {
+    setPrevMessageCount(messages.length);
     if (messages.length > 0) {
       setActiveTab("ai");
     }
-  }, [messages.length]);
+  }
 
   // Auto scroll in AI view
   useEffect(() => {
     if (scrollRef.current && activeTab === "ai") {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
+    // messages / isLoading はスクロールのトリガーとして意図的に依存に含めている
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies
   }, [messages, isLoading, activeTab]);
 
   const handleSend = (e: React.FormEvent) => {
@@ -78,7 +83,9 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
 
   const handleAskAboutWord = (word: string, meaning: string) => {
     setActiveTab("ai");
-    onSendMessage(`単語「${word}」（意味: ${meaning}）について、この画像文脈における詳しい用法・ニュアンス・例文を解説してください。`);
+    onSendMessage(
+      `単語「${word}」（意味: ${meaning}）について、この画像文脈における詳しい用法・ニュアンス・例文を解説してください。`,
+    );
   };
 
   const renderMarkdown = (content: string) => {
@@ -86,14 +93,20 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     return lines.map((line, idx) => {
       if (line.startsWith("### ")) {
         return (
-          <h3 key={idx} className="text-sm font-bold text-indigo-300 mt-4 mb-1.5 flex items-center gap-1.5">
+          <h3
+            key={idx}
+            className="text-sm font-bold text-indigo-300 mt-4 mb-1.5 flex items-center gap-1.5"
+          >
             {line.replace("### ", "")}
           </h3>
         );
       }
       if (line.startsWith("## ")) {
         return (
-          <h2 key={idx} className="text-base font-bold text-white mt-4 mb-2 pb-1 border-b border-slate-700/60">
+          <h2
+            key={idx}
+            className="text-base font-bold text-white mt-4 mb-2 pb-1 border-b border-slate-700/60"
+          >
             {line.replace("## ", "")}
           </h2>
         );
@@ -129,7 +142,10 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
       }
       if (part.startsWith("`") && part.endsWith("`")) {
         return (
-          <code key={i} className="bg-slate-800 text-indigo-300 px-1 py-0.5 rounded text-[11px] font-mono">
+          <code
+            key={i}
+            className="bg-slate-800 text-indigo-300 px-1 py-0.5 rounded text-[11px] font-mono"
+          >
             {part.slice(1, -1)}
           </code>
         );
@@ -211,7 +227,8 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
               const isSelected = item.id === selectedId;
               const src = item.croppedDataUrl || item.dataUrl;
               return (
-                <div
+                <button
+                  type="button"
                   key={item.id}
                   onClick={() => onSelectImage(item.id)}
                   className={`relative shrink-0 w-8 h-8 rounded-md overflow-hidden border cursor-pointer transition-all ${
@@ -225,7 +242,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                   <span className="absolute bottom-0 right-0 bg-black/80 text-[7px] font-mono text-white px-0.5">
                     {idx + 1}
                   </span>
-                </div>
+                </button>
               );
             })}
           </div>
@@ -276,7 +293,9 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         <span>全文翻訳</span>
                       </div>
                       <span className="text-[11px] text-slate-400">
-                        {items.length > 1 ? `全${items.length}枚の日本語訳` : "自然な日本語訳と原文"}
+                        {items.length > 1
+                          ? `全${items.length}枚の日本語訳`
+                          : "自然な日本語訳と原文"}
                       </span>
                     </button>
 
@@ -289,9 +308,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         <FileText className="w-4 h-4 group-hover:scale-110 transition-transform" />
                         <span>構文・文法解説</span>
                       </div>
-                      <span className="text-[11px] text-slate-400">
-                        SVOCや関係詞の分解
-                      </span>
+                      <span className="text-[11px] text-slate-400">SVOCや関係詞の分解</span>
                     </button>
 
                     <button
@@ -303,9 +320,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         <BookOpen className="w-4 h-4 group-hover:scale-110 transition-transform" />
                         <span>重要単語・熟語</span>
                       </div>
-                      <span className="text-[11px] text-slate-400">
-                        語彙・イディオムの抽出
-                      </span>
+                      <span className="text-[11px] text-slate-400">語彙・イディオムの抽出</span>
                     </button>
 
                     <button
@@ -317,9 +332,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
                         <HelpCircle className="w-4 h-4 group-hover:scale-110 transition-transform" />
                         <span>要約・要点</span>
                       </div>
-                      <span className="text-[11px] text-slate-400">
-                        短時間で大意を把握
-                      </span>
+                      <span className="text-[11px] text-slate-400">短時間で大意を把握</span>
                     </button>
                   </div>
                 </div>

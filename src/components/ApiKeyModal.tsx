@@ -49,7 +49,8 @@ export const ApiKeyModal: React.FC<ApiKeyModalProps> = ({
 
         <div className="space-y-4 text-xs text-slate-300 leading-relaxed">
           <p>
-            Google Gemini API キーを入力してください。設定したキーはブラウザ/ローカルにのみ保存され、外部サーバーには送信されません。
+            Google Gemini API
+            キーを入力してください。設定したキーはブラウザ/ローカルにのみ保存され、外部サーバーには送信されません。
           </p>
 
           <form onSubmit={handleSave} className="space-y-3">

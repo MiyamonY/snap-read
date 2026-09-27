@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Header } from "./components/Header.tsx";
 import { VideoPreview } from "./components/VideoPreview.tsx";
 import { ImageCropper } from "./components/ImageCropper.tsx";
@@ -23,7 +23,6 @@ export const App: React.FC = () => {
 
   // Media capture hook
   const {
-    stream,
     activeSource,
     isStreaming,
     error: mediaError,
@@ -102,35 +101,38 @@ export const App: React.FC = () => {
   }, [captureFrame, activeSource]);
 
   // Load images from file input
-  const handleSelectFiles = useCallback((fileList: FileList) => {
-    const fileArray = Array.from(fileList);
-    if (fileArray.length === 0) return;
+  const handleSelectFiles = useCallback(
+    (fileList: FileList) => {
+      const fileArray = Array.from(fileList);
+      if (fileArray.length === 0) return;
 
-    fileArray.forEach((file, index) => {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const dataUrl = event.target?.result as string;
-        if (dataUrl) {
-          const newItem: CaptureItem = {
-            id: `file-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 6)}`,
-            dataUrl,
-            thumbnailUrl: dataUrl,
-            source: "file",
-            timestamp: Date.now(),
-          };
-          setItems((prev) => {
-            const next = [...prev, newItem];
-            if (!selectedId) {
-              setSelectedId(newItem.id);
-            }
-            return next;
-          });
-          setViewMode("crop");
-        }
-      };
-      reader.readAsDataURL(file);
-    });
-  }, [selectedId]);
+      fileArray.forEach((file, index) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const dataUrl = event.target?.result as string;
+          if (dataUrl) {
+            const newItem: CaptureItem = {
+              id: `file-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 6)}`,
+              dataUrl,
+              thumbnailUrl: dataUrl,
+              source: "file",
+              timestamp: Date.now(),
+            };
+            setItems((prev) => {
+              const next = [...prev, newItem];
+              if (!selectedId) {
+                setSelectedId(newItem.id);
+              }
+              return next;
+            });
+            setViewMode("crop");
+          }
+        };
+        reader.readAsDataURL(file);
+      });
+    },
+    [selectedId],
+  );
 
   // Select an item to view / crop
   const handleSelectItem = useCallback((id: string) => {
@@ -139,20 +141,23 @@ export const App: React.FC = () => {
   }, []);
 
   // Delete an item
-  const handleDeleteItem = useCallback((id: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setItems((prev) => {
-      const filtered = prev.filter((item) => item.id !== id);
-      if (selectedId === id) {
-        setSelectedId(filtered.length > 0 ? filtered[filtered.length - 1].id : null);
-        if (filtered.length === 0) {
-          setViewMode("stream");
-          setOcrText("");
+  const handleDeleteItem = useCallback(
+    (id: string, e?: React.MouseEvent) => {
+      if (e) e.stopPropagation();
+      setItems((prev) => {
+        const filtered = prev.filter((item) => item.id !== id);
+        if (selectedId === id) {
+          setSelectedId(filtered.length > 0 ? filtered[filtered.length - 1].id : null);
+          if (filtered.length === 0) {
+            setViewMode("stream");
+            setOcrText("");
+          }
         }
-      }
-      return filtered;
-    });
-  }, [selectedId]);
+        return filtered;
+      });
+    },
+    [selectedId],
+  );
 
   // Clear all items
   const handleClearAll = useCallback(() => {
@@ -165,16 +170,15 @@ export const App: React.FC = () => {
   }, []);
 
   // Apply crop to currently selected item
-  const handleApplyCropToCurrent = useCallback((croppedDataUrl: string) => {
-    if (!selectedId) return;
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === selectedId
-          ? { ...item, croppedDataUrl }
-          : item
-      )
-    );
-  }, [selectedId]);
+  const handleApplyCropToCurrent = useCallback(
+    (croppedDataUrl: string) => {
+      if (!selectedId) return;
+      setItems((prev) =>
+        prev.map((item) => (item.id === selectedId ? { ...item, croppedDataUrl } : item)),
+      );
+    },
+    [selectedId],
+  );
 
   // Navigate between images
   const currentIndex = items.findIndex((it) => it.id === selectedId);
@@ -251,12 +255,10 @@ export const App: React.FC = () => {
         prompt,
         (chunk) => {
           setMessages((prev) =>
-            prev.map((msg) =>
-              msg.id === modelMsgId ? { ...msg, text: msg.text + chunk } : msg
-            )
+            prev.map((msg) => (msg.id === modelMsgId ? { ...msg, text: msg.text + chunk } : msg)),
           );
         },
-        DEFAULT_MODEL
+        DEFAULT_MODEL,
       );
 
       if (result.interactionId) {
@@ -267,8 +269,8 @@ export const App: React.FC = () => {
         prev.map((msg) =>
           msg.id === modelMsgId
             ? { ...msg, text: `⚠️ エラーが発生しました: ${err.message || String(err)}` }
-            : msg
-        )
+            : msg,
+        ),
       );
     } finally {
       setIsLoading(false);
@@ -311,12 +313,10 @@ export const App: React.FC = () => {
           interactionId,
           (chunk) => {
             setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === modelMsgId ? { ...msg, text: msg.text + chunk } : msg
-              )
+              prev.map((msg) => (msg.id === modelMsgId ? { ...msg, text: msg.text + chunk } : msg)),
             );
           },
-          DEFAULT_MODEL
+          DEFAULT_MODEL,
         );
         if (result.interactionId) {
           setInteractionId(result.interactionId);
@@ -328,12 +328,10 @@ export const App: React.FC = () => {
           text,
           (chunk) => {
             setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === modelMsgId ? { ...msg, text: msg.text + chunk } : msg
-              )
+              prev.map((msg) => (msg.id === modelMsgId ? { ...msg, text: msg.text + chunk } : msg)),
             );
           },
-          DEFAULT_MODEL
+          DEFAULT_MODEL,
         );
         if (result.interactionId) {
           setInteractionId(result.interactionId);
@@ -344,8 +342,8 @@ export const App: React.FC = () => {
         prev.map((msg) =>
           msg.id === modelMsgId
             ? { ...msg, text: `⚠️ エラーが発生しました: ${err.message || String(err)}` }
-            : msg
-        )
+            : msg,
+        ),
       );
     } finally {
       setIsLoading(false);
@@ -357,7 +355,6 @@ export const App: React.FC = () => {
       {/* Top Header */}
       <Header
         activeSource={activeSource}
-        captureCount={items.length}
         onSelectScreen={startScreenCapture}
         onSelectCamera={startCameraCapture}
         onSelectFiles={handleSelectFiles}

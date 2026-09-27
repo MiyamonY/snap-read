@@ -2,10 +2,11 @@
 
 @layer base {
   body {
-    font-family: 'Inter', 'Noto Sans JP', sans-serif;
+    font-family: "Inter", "Noto Sans JP", sans-serif;
   }
-  code, pre {
-    font-family: 'JetBrains Mono', monospace;
+  code,
+  pre {
+    font-family: "JetBrains Mono", monospace;
   }
 }
 

@@ -51,7 +51,16 @@ async function main() {
   if (!alreadyRunning) {
     console.log("📦 Vite 開発サーバーを開始しています...");
     const viteCmd = new Deno.Command("deno", {
-      args: ["run", "-A", "--node-modules-dir=auto", "npm:vite", "--host", HOST, "--port", String(PORT)],
+      args: [
+        "run",
+        "-A",
+        "--node-modules-dir=auto",
+        "npm:vite",
+        "--host",
+        HOST,
+        "--port",
+        String(PORT),
+      ],
       stdout: "inherit",
       stderr: "inherit",
     });

@@ -1,4 +1,4 @@
-export type SourceMode = 'screen' | 'camera' | 'file';
+export type SourceMode = "screen" | "camera" | "file";
 
 export interface CropRect {
   x: number;
@@ -16,11 +16,11 @@ export interface CaptureItem {
   timestamp: number;
 }
 
-export type AnalysisPreset = 'translate' | 'grammar' | 'vocab' | 'summary' | 'custom';
+export type AnalysisPreset = "translate" | "grammar" | "vocab" | "summary" | "custom";
 
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'model';
+  role: "user" | "model";
   text: string;
   timestamp: number;
   preset?: AnalysisPreset;

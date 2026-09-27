@@ -1,5 +1,5 @@
 import React from "react";
-import { Plus, Trash2, X, Image as ImageIcon } from "lucide-react";
+import { Plus, Trash2, X } from "lucide-react";
 import { CaptureItem } from "../types.ts";
 
 interface ImageTrayProps {
@@ -34,23 +34,29 @@ export const ImageTray: React.FC<ImageTrayProps> = ({
           return (
             <div
               key={item.id}
-              onClick={() => onSelect(item.id)}
               className={`relative group shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 cursor-pointer transition-all ${
                 isSelected
                   ? "border-indigo-500 ring-2 ring-indigo-500/40 shadow-md scale-105"
                   : "border-slate-700/80 hover:border-slate-500 opacity-75 hover:opacity-100"
               }`}
             >
-              <img
-                src={displayUrl}
-                alt={`Captured ${index + 1}`}
-                className="w-full h-full object-cover"
-              />
+              <button
+                type="button"
+                aria-pressed={isSelected}
+                onClick={() => onSelect(item.id)}
+                className="block w-full h-full cursor-pointer"
+              >
+                <img
+                  src={displayUrl}
+                  alt={`Captured ${index + 1}`}
+                  className="w-full h-full object-cover"
+                />
 
-              {/* Number Badge */}
-              <span className="absolute bottom-0.5 left-0.5 bg-black/70 text-[9px] font-mono font-bold text-white px-1 py-0.2 rounded-xs">
-                #{index + 1}
-              </span>
+                {/* Number Badge */}
+                <span className="absolute bottom-0.5 left-0.5 bg-black/70 text-[9px] font-mono font-bold text-white px-1 py-0.2 rounded-xs">
+                  #{index + 1}
+                </span>
+              </button>
 
               {/* Delete Button on Hover */}
               <button
@@ -82,9 +88,7 @@ export const ImageTray: React.FC<ImageTrayProps> = ({
       {/* Right: Summary & Clear All */}
       <div className="flex items-center gap-3 shrink-0 pl-2 border-l border-slate-800">
         <div className="text-right">
-          <div className="text-xs font-semibold text-slate-200">
-            {items.length} 枚
-          </div>
+          <div className="text-xs font-semibold text-slate-200">{items.length} 枚</div>
           <div className="text-[10px] text-slate-400">取り込み中</div>
         </div>
 

@@ -4,7 +4,12 @@
     "build": "deno run -A --node-modules-dir=auto npm:vite build",
     "preview": "deno run -A --node-modules-dir=auto npm:vite preview --host 127.0.0.1",
     "desktop": "deno run -A scripts/desktop.ts",
-    "desktop:app": "deno run -A scripts/desktop.ts"
+    "desktop:app": "deno run -A scripts/desktop.ts",
+    "lint": "deno run -A npm:oxlint",
+    "lint:fix": "deno run -A npm:oxlint --fix",
+    "fmt": "deno run -A npm:oxfmt",
+    "fmt:check": "deno run -A npm:oxfmt --check",
+    "hooks:install": "git config core.hooksPath .githooks"
   },
   "compilerOptions": {
     "jsx": "react-jsx",
@@ -18,7 +23,10 @@
     "@types/react-dom": "npm:@types/react-dom@^19.0.0",
     "@vitejs/plugin-react": "npm:@vitejs/plugin-react@^4.3.4",
     "clsx": "npm:clsx@^2.1.1",
+    "lint-staged": "npm:lint-staged@^17.6.0",
     "lucide-react": "npm:lucide-react@^1.16.0",
+    "oxfmt": "npm:oxfmt@^0.70.0",
+    "oxlint": "npm:oxlint@^1.85.0",
     "react": "npm:react@^19.0.0",
     "react-dom": "npm:react-dom@^19.0.0",
     "tailwind-merge": "npm:tailwind-merge@^3.0.0",

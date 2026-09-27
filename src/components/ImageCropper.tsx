@@ -1,5 +1,5 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
-import { Crop, RotateCcw, Sparkles, ChevronLeft, ChevronRight, Plus, Check } from "lucide-react";
+import React, { useState, useRef, useCallback } from "react";
+import { Crop, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { CropRect } from "../types.ts";
 
 interface ImageCropperProps {
@@ -29,13 +29,13 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
   const [isDragging, setIsDragging] = useState(false);
   const [startPos, setStartPos] = useState<{ x: number; y: number } | null>(null);
   const [cropRect, setCropRect] = useState<CropRect | null>(null);
-  const [hasAppliedCrop, setHasAppliedCrop] = useState(false);
 
   // Reset crop when image changes
-  useEffect(() => {
+  const [prevImageDataUrl, setPrevImageDataUrl] = useState(imageDataUrl);
+  if (prevImageDataUrl !== imageDataUrl) {
+    setPrevImageDataUrl(imageDataUrl);
     setCropRect(null);
-    setHasAppliedCrop(false);
-  }, [imageDataUrl]);
+  }
 
   // Handle Mouse Down
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -47,7 +47,6 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
     setIsDragging(true);
     setStartPos({ x, y });
     setCropRect({ x, y, width: 0, height: 0 });
-    setHasAppliedCrop(false);
   };
 
   // Handle Mouse Move
@@ -82,7 +81,6 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
 
     if (!cropRect || cropRect.width < 10 || cropRect.height < 10) {
       onApplyCropToCurrent(imageDataUrl);
-      setHasAppliedCrop(true);
       return;
     }
 
@@ -110,12 +108,11 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
       0,
       0,
       naturalCropW,
-      naturalCropH
+      naturalCropH,
     );
 
     const croppedDataUrl = canvas.toDataURL("image/jpeg", 0.95);
     onApplyCropToCurrent(croppedDataUrl);
-    setHasAppliedCrop(true);
     setCropRect(null);
   }, [cropRect, imageDataUrl, onApplyCropToCurrent]);
 
@@ -159,6 +156,7 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
       )}
 
       {/* Image Area with Drag-to-Crop Overlay */}
+      {/* oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- マウスドラッグ専用の切り抜き領域 */}
       <div
         className="relative max-w-full max-h-full flex items-center justify-center cursor-crosshair p-4"
         onMouseDown={handleMouseDown}

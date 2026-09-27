@@ -3,6 +3,9 @@ deno = "2.9.7"
 
 [env]
 
+[hooks]
+postinstall = "deno task hooks:install"
+
 [tasks.desktop]
 description = "SnapRead デスクトップアプリを起動"
 run = "deno task desktop"
@@ -14,3 +17,11 @@ run = "deno task dev"
 [tasks.build]
 description = "プロダクションビルド"
 run = "deno task build"
+
+[tasks.lint]
+description = "oxlint で静的解析"
+run = "deno task lint"
+
+[tasks.fmt]
+description = "oxfmt でフォーマット"
+run = "deno task fmt"

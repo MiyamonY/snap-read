@@ -42,7 +42,7 @@ export const PRESET_PROMPTS: Record<AnalysisPreset, string> = {
 ### 📋 主なポイント (箇条書き)
 ### 🔑 結論またはキーメッセージ`,
 
-  custom: ""
+  custom: "",
 };
 
 export class GeminiService {
@@ -73,10 +73,12 @@ export class GeminiService {
    */
   public async extractTextFromImages(
     base64DataUrls: string[],
-    modelName: string = DEFAULT_MODEL
+    modelName: string = DEFAULT_MODEL,
   ): Promise<string> {
     if (!this.client) {
-      throw new Error("Gemini APIキーが設定されていません。右上の設定ボタンからAPIキーを入力してください。");
+      throw new Error(
+        "Gemini APIキーが設定されていません。右上の設定ボタンからAPIキーを入力してください。",
+      );
     }
 
     if (base64DataUrls.length === 0) {
@@ -95,9 +97,10 @@ export class GeminiService {
       };
     });
 
-    const prompt = base64DataUrls.length > 1
-      ? "これらの画像に含まれているすべての英文を、画像順・段落順に正確に文字起こし（OCR）してください。挨拶や注釈は含めず、純粋な英文テキストのみ（必要に応じて[画像1]などの見出し）を出力してください。"
-      : "この画像に含まれているすべての英文を、元の段落や改行を保ちながら正確に文字起こし（OCR）してください。挨拶や注釈は含めず、純粋な英文テキストのみを出力してください。";
+    const prompt =
+      base64DataUrls.length > 1
+        ? "これらの画像に含まれているすべての英文を、画像順・段落順に正確に文字起こし（OCR）してください。挨拶や注釈は含めず、純粋な英文テキストのみ（必要に応じて[画像1]などの見出し）を出力してください。"
+        : "この画像に含まれているすべての英文を、元の段落や改行を保ちながら正確に文字起こし（OCR）してください。挨拶や注釈は含めず、純粋な英文テキストのみを出力してください。";
 
     const interaction = (await this.client.interactions.create({
       model: modelName,
@@ -113,9 +116,12 @@ export class GeminiService {
   public async lookupWordDefinition(
     word: string,
     contextSentence: string = "",
-    modelName: string = DEFAULT_MODEL
+    modelName: string = DEFAULT_MODEL,
   ): Promise<WordDefinition> {
-    const cleanWord = word.trim().toLowerCase().replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, "");
+    const cleanWord = word
+      .trim()
+      .toLowerCase()
+      .replace(/^[^a-zA-Z]+|[^a-zA-Z]+$/g, "");
     const cacheKey = `${cleanWord}__${contextSentence.slice(0, 40)}`;
 
     if (this.wordCache.has(cacheKey)) {
@@ -180,10 +186,12 @@ export class GeminiService {
     prompt: string,
     onChunk: (delta: string) => void,
     modelName: string = DEFAULT_MODEL,
-    previousInteractionId?: string
+    previousInteractionId?: string,
   ): Promise<{ fullText: string; interactionId?: string }> {
     if (!this.client) {
-      throw new Error("Gemini APIキーが設定されていません。右上の設定ボタンからAPIキーを入力してください。");
+      throw new Error(
+        "Gemini APIキーが設定されていません。右上の設定ボタンからAPIキーを入力してください。",
+      );
     }
 
     if (base64DataUrls.length === 0) {
@@ -221,7 +229,9 @@ export class GeminiService {
         requestOptions.previous_interaction_id = previousInteractionId;
       }
 
-      const stream = (await this.client.interactions.create(requestOptions)) as unknown as AsyncIterable<any>;
+      const stream = (await this.client.interactions.create(
+        requestOptions,
+      )) as unknown as AsyncIterable<any>;
 
       let fullText = "";
       let interactionId: string | undefined = undefined;
@@ -242,7 +252,7 @@ export class GeminiService {
       return { fullText, interactionId };
     } catch (err: any) {
       console.error("Gemini API error:", err);
-      throw new Error(`Gemini API 呼び出しエラー: ${err.message || String(err)}`);
+      throw new Error(`Gemini API 呼び出しエラー: ${err.message || String(err)}`, { cause: err });
     }
   }
 
@@ -254,9 +264,15 @@ export class GeminiService {
     prompt: string,
     onChunk: (delta: string) => void,
     modelName: string = DEFAULT_MODEL,
-    previousInteractionId?: string
+    previousInteractionId?: string,
   ): Promise<{ fullText: string; interactionId?: string }> {
-    return this.analyzeImagesStream([base64DataUrl], prompt, onChunk, modelName, previousInteractionId);
+    return this.analyzeImagesStream(
+      [base64DataUrl],
+      prompt,
+      onChunk,
+      modelName,
+      previousInteractionId,
+    );
   }
 
   /**
@@ -266,7 +282,7 @@ export class GeminiService {
     prompt: string,
     previousInteractionId: string,
     onChunk: (delta: string) => void,
-    modelName: string = DEFAULT_MODEL
+    modelName: string = DEFAULT_MODEL,
   ): Promise<{ fullText: string; interactionId?: string }> {
     if (!this.client) {
       throw new Error("Gemini APIキーが設定されていません。");
@@ -299,7 +315,7 @@ export class GeminiService {
       return { fullText, interactionId };
     } catch (err: any) {
       console.error("Gemini API continue chat error:", err);
-      throw new Error(`Gemini API 呼び出しエラー: ${err.message || String(err)}`);
+      throw new Error(`Gemini API 呼び出しエラー: ${err.message || String(err)}`, { cause: err });
     }
   }
 }

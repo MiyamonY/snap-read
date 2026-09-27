@@ -65,22 +65,43 @@ mise install
 ### 3. アプリケーションの起動
 
 #### デスクトップアプリモードで起動 (独立ウィンドウ)
+
 ```bash
 mise run desktop
 # または deno task desktop
 ```
-*Chromium/Chrome のスタンドアロンウィンドウ（アドレスバーなし）としてアプリが起動します。*
+
+_Chromium/Chrome のスタンドアロンウィンドウ（アドレスバーなし）としてアプリが起動します。_
 
 #### ブラウザ開発サーバーとして起動
+
 ```bash
 mise run dev
 # または deno task dev
 ```
+
 ブラウザで `http://127.0.0.1:5173` を開きます。
 
 #### プロダクションビルド
+
 ```bash
 mise run build
 # または deno task build
 ```
 
+#### Lint / フォーマット
+
+```bash
+mise run lint        # または deno task lint（oxlint）
+mise run fmt         # または deno task fmt（oxfmt で整形）
+deno task lint:fix   # 自動修正可能な lint 指摘を修正
+deno task fmt:check  # フォーマット差分のチェックのみ
+```
+
+#### Git フック (lint-staged)
+
+コミット時に、ステージしたファイルへ `oxlint --fix` と `oxfmt` を自動で実行します。`mise install` で自動的に有効化されます。手動で有効化する場合は次を実行してください：
+
+```bash
+deno task hooks:install
+```
