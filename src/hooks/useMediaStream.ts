@@ -23,13 +23,15 @@ export function useMediaStream() {
     setError(null);
     stopStream();
 
-    try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getDisplayMedia) {
-        throw new Error(
-          "お使いの環境では画面キャプチャ (getDisplayMedia) がサポートされていません。",
-        );
-      }
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      setError(
+        "画面キャプチャの開始に失敗しました: お使いの環境では画面キャプチャ (getDisplayMedia) がサポートされていません。",
+      );
+      setActiveSource("none");
+      return;
+    }
 
+    try {
       const mediaStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           displaySurface: "window",
@@ -62,11 +64,15 @@ export function useMediaStream() {
     setError(null);
     stopStream();
 
-    try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error("お使いの環境ではカメラ (getUserMedia) がサポートされていません。");
-      }
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setError(
+        "カメラの起動に失敗しました: お使いの環境ではカメラ (getUserMedia) がサポートされていません。",
+      );
+      setActiveSource("none");
+      return;
+    }
 
+    try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
           width: { ideal: 1920 },

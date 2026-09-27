@@ -71,9 +71,8 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
         setDefinition(def);
       } catch (err) {
         console.error("Lookup error:", err);
-      } finally {
-        setIsLookingUp(false);
       }
+      setIsLookingUp(false);
     },
     [],
   );

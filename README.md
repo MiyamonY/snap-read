@@ -31,7 +31,7 @@ Webカメラや画面キャプチャ（PDF・英語記事・ゲーム・動画�
 ## 🛠️ 技術スタック
 
 - **ランタイム / パッケージ管理**: [Deno 2.9+](https://deno.com/) + [mise](https://mise.jdx.dev/)
-- **フロントエンド**: [React 19](https://react.dev/), [TypeScript](https://www.typescriptlang.org/), [Vite 6](https://vite.dev/)
+- **フロントエンド**: [React 19](https://react.dev/), [TypeScript](https://www.typescriptlang.org/), [Vite 8](https://vite.dev/) (Rolldown)
 - **スタイリング**: [Tailwind CSS v4](https://tailwindcss.com/)
 - **アイコン**: [lucide-react](https://lucide.dev/)
 - **AI SDK**: [@google/genai](https://www.npmjs.com/package/@google/genai) (`gemini-3.8-flash`)

@@ -80,9 +80,8 @@ export const App: React.FC = () => {
     } catch (err) {
       console.error("OCR extraction failed:", err);
       setOcrText(`⚠️ テキスト抽出エラー: ${errorMessage(err)}`);
-    } finally {
-      setIsOcrLoading(false);
     }
+    setIsOcrLoading(false);
   }, [items, apiKey]);
 
   // Capture current video frame into items
@@ -267,16 +266,14 @@ export const App: React.FC = () => {
         setInteractionId(result.interactionId);
       }
     } catch (err) {
+      const message = errorMessage(err);
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.id === modelMsgId
-            ? { ...msg, text: `⚠️ エラーが発生しました: ${errorMessage(err)}` }
-            : msg,
+          msg.id === modelMsgId ? { ...msg, text: `⚠️ エラーが発生しました: ${message}` } : msg,
         ),
       );
-    } finally {
-      setIsLoading(false);
     }
+    setIsLoading(false);
   };
 
   // Follow-up chat message
@@ -314,29 +311,29 @@ export const App: React.FC = () => {
       );
     };
 
+    const request = interactionId
+      ? geminiService.continueChatStream(text, interactionId, appendChunk, DEFAULT_MODEL)
+      : geminiService.analyzeImagesStream(
+          items.map((it) => it.croppedDataUrl || it.dataUrl),
+          text,
+          appendChunk,
+          DEFAULT_MODEL,
+        );
+
     try {
-      const result = interactionId
-        ? await geminiService.continueChatStream(text, interactionId, appendChunk, DEFAULT_MODEL)
-        : await geminiService.analyzeImagesStream(
-            items.map((it) => it.croppedDataUrl || it.dataUrl),
-            text,
-            appendChunk,
-            DEFAULT_MODEL,
-          );
+      const result = await request;
       if (result.interactionId) {
         setInteractionId(result.interactionId);
       }
     } catch (err) {
+      const message = errorMessage(err);
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.id === modelMsgId
-            ? { ...msg, text: `⚠️ エラーが発生しました: ${errorMessage(err)}` }
-            : msg,
+          msg.id === modelMsgId ? { ...msg, text: `⚠️ エラーが発生しました: ${message}` } : msg,
         ),
       );
-    } finally {
-      setIsLoading(false);
     }
+    setIsLoading(false);
   };
 
   return (

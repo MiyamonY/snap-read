@@ -21,17 +21,18 @@
     "@tailwindcss/vite": "npm:@tailwindcss/vite@^4.0.0",
     "@types/react": "npm:@types/react@^19.0.0",
     "@types/react-dom": "npm:@types/react-dom@^19.0.0",
-    "@vitejs/plugin-react": "npm:@vitejs/plugin-react@^4.3.4",
+    "@vitejs/plugin-react": "npm:@vitejs/plugin-react@^6.1.1",
     "clsx": "npm:clsx@^2.1.1",
     "lint-staged": "npm:lint-staged@^17.6.0",
     "lucide-react": "npm:lucide-react@^1.16.0",
+    "oxc-transform-react": "npm:oxc-transform-react@^0.145.0",
     "oxfmt": "npm:oxfmt@^0.70.0",
     "oxlint": "npm:oxlint@^1.85.0",
     "react": "npm:react@^19.0.0",
     "react-dom": "npm:react-dom@^19.0.0",
     "tailwind-merge": "npm:tailwind-merge@^3.0.0",
     "tailwindcss": "npm:tailwindcss@^4.0.0",
-    "vite": "npm:vite@^6.0.0"
+    "vite": "npm:vite@^8.3.1"
   },
   "nodeModulesDir": "auto"
 }
