@@ -1,0 +1,16 @@
+[tools]
+deno = "2.9.7"
+
+[env]
+
+[tasks.desktop]
+description = "SnapRead デスクトップアプリを起動"
+run = "deno task desktop"
+
+[tasks.dev]
+description = "Vite 開発サーバーを起動"
+run = "deno task dev"
+
+[tasks.build]
+description = "プロダクションビルド"
+run = "deno task build"
