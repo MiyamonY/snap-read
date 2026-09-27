@@ -9,8 +9,10 @@ import {
   X,
   BookmarkPlus,
   BookmarkCheck,
+  Image as ImageIcon,
 } from "lucide-react";
-import type { VocabularyInput, WordDefinition } from "../types.ts";
+import type { CaptureItem, VocabularyInput, WordDefinition } from "../types.ts";
+import { ImageViewer } from "./ImageViewer.tsx";
 import { aiService, MODEL_LABEL } from "../services/ai.ts";
 import { normalizeOcrText } from "../services/ocrText.ts";
 
@@ -18,6 +20,7 @@ type ColumnCount = 1 | 2 | 4;
 
 const COLUMN_OPTIONS: ColumnCount[] = [1, 2, 4];
 const COLUMNS_STORAGE_KEY = "snapread_reader_columns";
+const SHOW_IMAGES_STORAGE_KEY = "snapread_reader_images";
 
 const COLUMN_CLASSES: Record<ColumnCount, string> = {
   1: "columns-1",
@@ -67,7 +70,8 @@ interface InteractiveReaderProps {
   isOcrLoading: boolean;
   onExtractOcr: () => void;
   onAskAboutWord: (word: string, meaning: string) => void;
-  hasImages: boolean;
+  /** フォルダ内の画像（右半分に表示できる） */
+  items: CaptureItem[];
   /** 単語帳に登録済みの単語（小文字） */
   savedWords: Set<string>;
   onSaveWord: (word: string, input: VocabularyInput) => void;
@@ -79,7 +83,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
   isOcrLoading,
   onExtractOcr,
   onAskAboutWord,
-  hasImages,
+  items,
   savedWords,
   onSaveWord,
   onRemoveWord,
@@ -92,6 +96,15 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
   const [copied, setCopied] = useState(false);
   const [fontSize, setFontSize] = useState<"sm" | "base" | "lg">("base");
   const [columnCount, setColumnCount] = useState<ColumnCount>(loadColumnCount);
+  const [showImages, setShowImages] = useState(
+    () => localStorage.getItem(SHOW_IMAGES_STORAGE_KEY) === "show",
+  );
+  const hasImages = items.length > 0;
+
+  const toggleImages = () => {
+    setShowImages(!showImages);
+    localStorage.setItem(SHOW_IMAGES_STORAGE_KEY, showImages ? "hide" : "show");
+  };
 
   const changeColumnCount = (count: ColumnCount) => {
     setColumnCount(count);
@@ -311,18 +324,18 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
   return (
     <div className="relative flex flex-col h-full bg-slate-900 overflow-hidden">
       {/* Sub Header Toolbar */}
-      <div className="h-10 border-b border-slate-800/80 px-4 flex items-center justify-between shrink-0 bg-slate-950/40 text-xs text-slate-400">
-        <div className="flex items-center gap-2">
-          <FileText className="w-3.5 h-3.5 text-indigo-400" />
-          <span className="font-medium text-slate-300">インタラクティブテキスト読解</span>
+      <div className="h-10 border-b border-slate-800/80 px-4 flex items-center justify-between gap-3 shrink-0 bg-slate-950/40 text-xs text-slate-400">
+        <div className="flex items-center gap-2 min-w-0 whitespace-nowrap">
+          <FileText className="w-3.5 h-3.5 shrink-0 text-indigo-400" />
+          <span className="font-medium text-slate-300 truncate">インタラクティブテキスト読解</span>
           {ocrText && (
-            <span className="text-[10px] text-slate-500">
+            <span className="text-[10px] text-slate-500 truncate">
               （単語をクリックで辞書表示・Shift+クリックかドラッグで熟語）
             </span>
           )}
         </div>
 
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 shrink-0 whitespace-nowrap">
           {/* Font Size controls */}
           <div className="flex items-center bg-slate-900 border border-slate-800 rounded-md p-0.5 mr-2">
             <button
@@ -350,6 +363,22 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
               大
             </button>
           </div>
+
+          {/* Show images on the right half */}
+          <button
+            type="button"
+            onClick={toggleImages}
+            aria-pressed={showImages}
+            className={`flex items-center gap-1 px-2 py-1 mr-2 rounded-md border text-[10px] transition-colors cursor-pointer ${
+              showImages
+                ? "bg-indigo-600 border-indigo-500 text-white"
+                : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+            }`}
+            title={showImages ? "画像を隠す" : "右半分に画像を表示"}
+          >
+            <ImageIcon className="w-3 h-3" />
+            <span>画像</span>
+          </button>
 
           {/* Column layout controls */}
           <div
@@ -398,157 +427,164 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
         </div>
       </div>
 
-      {/* Main Reader View */}
-      <div
-        ref={containerRef}
-        onWheel={handleWheel}
-        className={`relative flex-1 min-h-0 p-5 ${
-          columnCount === 1 ? "overflow-y-auto" : "overflow-x-auto overflow-y-hidden"
-        } ${fontSizeClass}`}
-      >
-        {isOcrLoading ? (
-          <div className="flex flex-col items-center justify-center h-48 space-y-3 text-center">
-            <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
-            <p className="text-xs text-slate-300 font-medium">
-              画像から英文テキストを抽出しています...
-            </p>
-            <span className="text-[11px] text-slate-500">
-              Cloud Vision で文字を読み取り、{MODEL_LABEL} で本文を整形中
-            </span>
-          </div>
-        ) : ocrText ? (
-          // oxlint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- 単語のクリックとテキスト範囲選択（マウス操作）を拾う
-          <div
-            onClick={handleTextClick}
-            onMouseUp={handleTextMouseUp}
-            className={`font-sans antialiased max-w-none select-text ${COLUMN_CLASSES[columnCount]} ${
-              columnCount === 1 ? "" : "h-full [column-fill:auto]"
-            }`}
-          >
-            {renderInteractiveText(ocrText)}
-          </div>
-        ) : (
-          <div className="flex flex-col items-center justify-center h-52 text-center p-6 space-y-3">
-            <div className="w-12 h-12 rounded-xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-center text-indigo-400">
-              <Sparkles className="w-6 h-6" />
-            </div>
-            <div>
-              <p className="text-xs font-medium text-slate-200">
-                {hasImages
-                  ? "画像からテキスト（OCR）を抽出できます"
-                  : "まず右側で画像をキャプチャしてください"}
+      {/* Main Reader View (text | images) */}
+      <div className="flex flex-1 min-h-0">
+        <div
+          ref={containerRef}
+          onWheel={handleWheel}
+          className={`relative flex-1 min-w-0 min-h-0 p-5 ${
+            columnCount === 1 ? "overflow-y-auto" : "overflow-x-auto overflow-y-hidden"
+          } ${fontSizeClass}`}
+        >
+          {isOcrLoading ? (
+            <div className="flex flex-col items-center justify-center h-48 space-y-3 text-center">
+              <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
+              <p className="text-xs text-slate-300 font-medium">
+                画像から英文テキストを抽出しています...
               </p>
-              <p className="text-[11px] text-slate-400 mt-1 max-w-sm">
-                文字化された英文は、分からない単語をクリックするだけで文脈に合った日本語の語義がポップアップ表示されます。
-              </p>
+              <span className="text-[11px] text-slate-500">
+                Cloud Vision で文字を読み取り、{MODEL_LABEL} で本文を整形中
+              </span>
             </div>
-
-            {hasImages && (
-              <button
-                type="button"
-                onClick={onExtractOcr}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
-              >
-                <Sparkles className="w-4 h-4" />
-                <span>テキストをOCR抽出する</span>
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Word Definition Popover Card */}
-        {selectedWord && popoverPos && (
-          <div
-            className="word-popover absolute z-30 w-72 bg-slate-900 border border-indigo-500/50 rounded-xl p-3.5 shadow-2xl animate-in fade-in zoom-in-95 duration-100"
-            style={{
-              top: `${popoverPos.top}px`,
-              left: `${popoverPos.left}px`,
-            }}
-          >
-            {/* Header: Word & Close */}
-            <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
-              <div className="flex items-center gap-1.5">
-                <span className="font-bold text-white text-sm">{selectedWord}</span>
-                {definition?.phonetic && (
-                  <span className="text-[10px] font-mono text-slate-400">
-                    /{definition.phonetic}/
-                  </span>
-                )}
-              </div>
-              <button
-                type="button"
-                onClick={closePopover}
-                className="text-slate-400 hover:text-white p-0.5 rounded hover:bg-slate-800"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
+          ) : ocrText ? (
+            // oxlint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- 単語のクリックとテキスト範囲選択（マウス操作）を拾う
+            <div
+              onClick={handleTextClick}
+              onMouseUp={handleTextMouseUp}
+              className={`font-sans antialiased max-w-none select-text ${COLUMN_CLASSES[columnCount]} ${
+                columnCount === 1 ? "" : "h-full [column-fill:auto]"
+              }`}
+            >
+              {renderInteractiveText(ocrText)}
             </div>
-
-            {/* Content Body */}
-            {isLookingUp ? (
-              <div className="flex items-center gap-2 py-4 justify-center text-xs text-indigo-300">
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                <span>語義を検索中...</span>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-52 text-center p-6 space-y-3">
+              <div className="w-12 h-12 rounded-xl bg-slate-800/80 border border-slate-700/60 flex items-center justify-center text-indigo-400">
+                <Sparkles className="w-6 h-6" />
               </div>
-            ) : definition ? (
-              <div className="pt-2 space-y-2 text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="bg-indigo-500/20 text-indigo-300 text-[10px] font-semibold px-1.5 py-0.5 rounded">
-                    {definition.partOfSpeech}
-                  </span>
-                  <span className="text-white font-semibold text-sm">{definition.meaning}</span>
-                </div>
+              <div>
+                <p className="text-xs font-medium text-slate-200">
+                  {hasImages
+                    ? "画像からテキスト（OCR）を抽出できます"
+                    : "まず右側で画像をキャプチャしてください"}
+                </p>
+                <p className="text-[11px] text-slate-400 mt-1 max-w-sm">
+                  文字化された英文は、分からない単語をクリックするだけで文脈に合った日本語の語義がポップアップ表示されます。
+                </p>
+              </div>
 
-                {definition.detail && (
-                  <p className="text-[11px] text-slate-300 leading-relaxed bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
-                    {definition.detail}
-                  </p>
-                )}
-
-                {/* Save to / remove from the folder's vocabulary list */}
-                {savedWords.has(definition.word.toLowerCase()) ? (
-                  <button
-                    type="button"
-                    onClick={() => onRemoveWord(definition.word)}
-                    className="w-full mt-1.5 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-rose-500/20 text-emerald-300 hover:text-rose-300 text-[11px] font-medium transition-colors cursor-pointer"
-                    title="クリックで単語帳から削除"
-                  >
-                    <BookmarkCheck className="w-3 h-3" />
-                    <span>単語帳に登録済み</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onSaveWord(definition.word, {
-                        phonetic: definition.phonetic,
-                        partOfSpeech: definition.partOfSpeech,
-                        meaning: definition.meaning,
-                        detail: definition.detail,
-                        context: selectedContext,
-                      })
-                    }
-                    className="w-full mt-1.5 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-emerald-600 text-slate-300 hover:text-white text-[11px] font-medium transition-colors cursor-pointer"
-                  >
-                    <BookmarkPlus className="w-3 h-3" />
-                    <span>単語帳に追加</span>
-                  </button>
-                )}
-
-                {/* Ask AI about this word */}
+              {hasImages && (
                 <button
                   type="button"
-                  onClick={() => {
-                    onAskAboutWord(definition.word, definition.meaning);
-                    closePopover();
-                  }}
-                  className="w-full mt-1.5 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white text-[11px] font-medium transition-colors cursor-pointer"
+                  onClick={onExtractOcr}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium shadow-md shadow-indigo-600/30 transition-all cursor-pointer"
                 >
-                  <Sparkles className="w-3 h-3 text-indigo-400 group-hover:text-white" />
-                  <span>この単語について詳しく質問</span>
+                  <Sparkles className="w-4 h-4" />
+                  <span>テキストをOCR抽出する</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Word Definition Popover Card */}
+          {selectedWord && popoverPos && (
+            <div
+              className="word-popover absolute z-30 w-72 bg-slate-900 border border-indigo-500/50 rounded-xl p-3.5 shadow-2xl animate-in fade-in zoom-in-95 duration-100"
+              style={{
+                top: `${popoverPos.top}px`,
+                left: `${popoverPos.left}px`,
+              }}
+            >
+              {/* Header: Word & Close */}
+              <div className="flex items-center justify-between pb-1.5 border-b border-slate-800">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-bold text-white text-sm">{selectedWord}</span>
+                  {definition?.phonetic && (
+                    <span className="text-[10px] font-mono text-slate-400">
+                      /{definition.phonetic}/
+                    </span>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={closePopover}
+                  className="text-slate-400 hover:text-white p-0.5 rounded hover:bg-slate-800"
+                >
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </div>
-            ) : null}
+
+              {/* Content Body */}
+              {isLookingUp ? (
+                <div className="flex items-center gap-2 py-4 justify-center text-xs text-indigo-300">
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  <span>語義を検索中...</span>
+                </div>
+              ) : definition ? (
+                <div className="pt-2 space-y-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="bg-indigo-500/20 text-indigo-300 text-[10px] font-semibold px-1.5 py-0.5 rounded">
+                      {definition.partOfSpeech}
+                    </span>
+                    <span className="text-white font-semibold text-sm">{definition.meaning}</span>
+                  </div>
+
+                  {definition.detail && (
+                    <p className="text-[11px] text-slate-300 leading-relaxed bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
+                      {definition.detail}
+                    </p>
+                  )}
+
+                  {/* Save to / remove from the folder's vocabulary list */}
+                  {savedWords.has(definition.word.toLowerCase()) ? (
+                    <button
+                      type="button"
+                      onClick={() => onRemoveWord(definition.word)}
+                      className="w-full mt-1.5 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-rose-500/20 text-emerald-300 hover:text-rose-300 text-[11px] font-medium transition-colors cursor-pointer"
+                      title="クリックで単語帳から削除"
+                    >
+                      <BookmarkCheck className="w-3 h-3" />
+                      <span>単語帳に登録済み</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        onSaveWord(definition.word, {
+                          phonetic: definition.phonetic,
+                          partOfSpeech: definition.partOfSpeech,
+                          meaning: definition.meaning,
+                          detail: definition.detail,
+                          context: selectedContext,
+                        })
+                      }
+                      className="w-full mt-1.5 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-emerald-600 text-slate-300 hover:text-white text-[11px] font-medium transition-colors cursor-pointer"
+                    >
+                      <BookmarkPlus className="w-3 h-3" />
+                      <span>単語帳に追加</span>
+                    </button>
+                  )}
+
+                  {/* Ask AI about this word */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onAskAboutWord(definition.word, definition.meaning);
+                      closePopover();
+                    }}
+                    className="w-full mt-1.5 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white text-[11px] font-medium transition-colors cursor-pointer"
+                  >
+                    <Sparkles className="w-3 h-3 text-indigo-400 group-hover:text-white" />
+                    <span>この単語について詳しく質問</span>
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+        {showImages && (
+          <div className="w-1/2 shrink-0 border-l border-slate-800">
+            <ImageViewer items={items} />
           </div>
         )}
       </div>

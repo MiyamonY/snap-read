@@ -73,8 +73,6 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
     );
   };
 
-  const hasImages = items.length > 0;
-
   return (
     <div className="flex flex-col h-full bg-slate-900 w-full overflow-hidden">
       {/* Main Tab Content (AI chat floats over it) */}
@@ -85,7 +83,7 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             isOcrLoading={isOcrLoading}
             onExtractOcr={onExtractOcr}
             onAskAboutWord={handleAskAboutWord}
-            hasImages={hasImages}
+            items={items}
             savedWords={vocabulary.savedWords}
             onSaveWord={vocabulary.onSave}
             onRemoveWord={vocabulary.onRemove}
