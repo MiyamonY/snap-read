@@ -1,71 +1,16 @@
-import type { IncomingMessage, ServerResponse } from "node:http";
-import type { Connect } from "vite";
+import { Application, createHttpError, isHttpError, Router, Status } from "@oak/oak";
 import type { FolderPatch } from "../src/types.ts";
 import type { Store } from "./db.ts";
 import type { DriveSync } from "./driveSync.ts";
 
 const MAX_IMAGE_BYTES = 30 * 1024 * 1024;
 
-const readBody = async (req: IncomingMessage, limit = Infinity): Promise<Buffer> => {
-  const chunks: Buffer[] = [];
-  let size = 0;
-  for await (const chunk of req) {
-    size += (chunk as Buffer).length;
-    if (size > limit) {
-      throw new HttpError(413, "payload too large");
-    }
-    chunks.push(chunk as Buffer);
-  }
-  return Buffer.concat(chunks);
-};
-
-class HttpError extends Error {
-  constructor(
-    readonly status: number,
-    message: string,
-  ) {
-    super(message);
-  }
+interface ApiDeps {
+  store: Store;
+  drive: DriveSync;
+  /** POST /api/shutdown で呼ばれる（デスクトップアプリの終了用） */
+  onShutdown: () => void;
 }
-
-const sendJson = (res: ServerResponse, status: number, body: unknown) => {
-  res.writeHead(status, { "Content-Type": "application/json" });
-  res.end(JSON.stringify(body));
-};
-
-const sendEmpty = (res: ServerResponse, status: number) => {
-  res.writeHead(status);
-  res.end();
-};
-
-const redirect = (res: ServerResponse, location: string) => {
-  res.writeHead(302, { Location: location });
-  res.end();
-};
-
-/** マウント位置以降のパスをセグメントに分解する */
-const parseUrl = (req: IncomingMessage) => {
-  const url = new URL(req.url ?? "/", "http://localhost");
-  const segments = url.pathname
-    .split("/")
-    .filter(Boolean)
-    .map((segment) => decodeURIComponent(segment));
-  return { segments, query: url.searchParams };
-};
-
-/** 例外を JSON のエラーレスポンスに変換する */
-const handler =
-  (
-    name: string,
-    fn: (req: IncomingMessage, res: ServerResponse) => Promise<void>,
-  ): Connect.NextHandleFunction =>
-  (req, res) => {
-    fn(req, res).catch((err: unknown) => {
-      const status = err instanceof HttpError ? err.status : 500;
-      if (status >= 500) console.error(`[${name}]`, err);
-      sendJson(res, status, { error: err instanceof Error ? err.message : String(err) });
-    });
-  };
 
 /**
  * /api/folders
@@ -73,62 +18,54 @@ const handler =
  *   PUT    /:id    フォルダの保存
  *   DELETE /:id    フォルダの削除
  */
-export const createFolderApi = (store: Store, drive: DriveSync) =>
-  handler("folder-api", async (req, res) => {
-    const { segments } = parseUrl(req);
-    const [id] = segments;
-
-    if (req.method === "GET" && !id) {
-      sendJson(res, 200, store.listFolders());
-      return;
-    }
-    if (req.method === "PUT" && id) {
-      const patch = JSON.parse((await readBody(req)).toString("utf8")) as FolderPatch;
-      if (patch.id !== id) throw new HttpError(400, "id mismatch");
+const folderRouter = ({ store, drive }: ApiDeps) =>
+  new Router({ prefix: "/api/folders" })
+    .get("/", (ctx) => {
+      ctx.response.body = store.listFolders();
+    })
+    .put("/:id", async (ctx) => {
+      const patch = (await ctx.request.body.json()) as FolderPatch;
+      if (patch.id !== ctx.params.id) throw createHttpError(Status.BadRequest, "id mismatch");
       drive.removeImageFiles(store.saveFolder(patch));
-      sendEmpty(res, 204);
-      return;
-    }
-    if (req.method === "DELETE" && id) {
-      drive.removeImageFiles(store.deleteFolder(id));
-      sendEmpty(res, 204);
-      return;
-    }
-    throw new HttpError(404, "not found");
-  });
+      ctx.response.status = Status.NoContent;
+    })
+    .delete("/:id", (ctx) => {
+      drive.removeImageFiles(store.deleteFolder(ctx.params.id));
+      ctx.response.status = Status.NoContent;
+    });
 
 /**
  * /api/images
  *   POST /?folderId=xxx  画像の保存（body: 画像バイナリ）→ { id }
  *   GET  /:id            画像の取得
  */
-export const createImageApi = (drive: DriveSync) =>
-  handler("image-api", async (req, res) => {
-    const { segments, query } = parseUrl(req);
-    const [id] = segments;
-
-    if (req.method === "POST" && !id) {
-      const folderId = query.get("folderId");
-      const mimeType = req.headers["content-type"] ?? "";
-      if (!folderId) throw new HttpError(400, "folderId is required");
-      if (!mimeType.startsWith("image/")) throw new HttpError(415, "image/* is required");
-      const data = await readBody(req, MAX_IMAGE_BYTES);
-      sendJson(res, 201, { id: await drive.saveImage(folderId, mimeType, data) });
-      return;
-    }
-    if (req.method === "GET" && id) {
-      const image = await drive.readImage(id);
-      if (!image) throw new HttpError(404, "image not found");
-      res.writeHead(200, {
-        "Content-Type": image.mimeType,
-        // 画像 ID ごとに内容は不変
-        "Cache-Control": "private, max-age=31536000, immutable",
-      });
-      res.end(image.data);
-      return;
-    }
-    throw new HttpError(404, "not found");
-  });
+const imageRouter = ({ drive }: ApiDeps) =>
+  new Router({ prefix: "/api/images" })
+    .post("/", async (ctx) => {
+      const folderId = ctx.request.url.searchParams.get("folderId");
+      const mimeType = ctx.request.headers.get("content-type") ?? "";
+      if (!folderId) throw createHttpError(Status.BadRequest, "folderId is required");
+      if (!mimeType.startsWith("image/")) {
+        throw createHttpError(Status.UnsupportedMediaType, "image/* is required");
+      }
+      if (Number(ctx.request.headers.get("content-length") ?? 0) > MAX_IMAGE_BYTES) {
+        throw createHttpError(Status.RequestEntityTooLarge, "payload too large");
+      }
+      const data = new Uint8Array(await ctx.request.body.arrayBuffer());
+      if (data.byteLength > MAX_IMAGE_BYTES) {
+        throw createHttpError(Status.RequestEntityTooLarge, "payload too large");
+      }
+      ctx.response.status = Status.Created;
+      ctx.response.body = { id: await drive.saveImage(folderId, mimeType, data) };
+    })
+    .get("/:id", async (ctx) => {
+      const image = await drive.readImage(ctx.params.id);
+      if (!image) throw createHttpError(Status.NotFound, "image not found");
+      ctx.response.type = image.mimeType;
+      // 画像 ID ごとに内容は不変
+      ctx.response.headers.set("Cache-Control", "private, max-age=31536000, immutable");
+      ctx.response.body = image.data;
+    });
 
 /**
  * /api/auth/google
@@ -137,27 +74,28 @@ export const createImageApi = (drive: DriveSync) =>
  *   GET  /callback  認可コードを受け取り、アプリに戻る
  *   POST /logout    接続解除（トークンを取り消す）
  */
-export const createGoogleAuthApi = (drive: DriveSync) =>
-  handler("google-auth", async (req, res) => {
-    const { segments, query } = parseUrl(req);
-    const [action] = segments;
-
-    if (req.method === "GET" && action === "status") {
-      sendJson(res, 200, drive.status());
-      return;
-    }
-    if (req.method === "GET" && action === "login") {
+const googleAuthRouter = ({ drive }: ApiDeps) =>
+  new Router({ prefix: "/api/auth/google" })
+    .get("/status", (ctx) => {
+      ctx.response.body = drive.status();
+    })
+    .get("/login", (ctx) => {
       const url = drive.startLogin();
-      if (!url) throw new HttpError(400, "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET が未設定です");
-      redirect(res, url);
-      return;
-    }
-    if (req.method === "GET" && action === "callback") {
+      if (!url) {
+        throw createHttpError(
+          Status.BadRequest,
+          "GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET が未設定です",
+        );
+      }
+      ctx.response.redirect(url);
+    })
+    .get("/callback", async (ctx) => {
+      const query = ctx.request.url.searchParams;
       const error = query.get("error");
       const code = query.get("code");
       const state = query.get("state");
       if (error || !code || !state) {
-        redirect(res, `/?drive_error=${encodeURIComponent(error ?? "invalid_request")}`);
+        ctx.response.redirect(`/?drive_error=${encodeURIComponent(error ?? "invalid_request")}`);
         return;
       }
       try {
@@ -165,16 +103,54 @@ export const createGoogleAuthApi = (drive: DriveSync) =>
       } catch (err) {
         console.error("[google-auth]", err);
         const message = err instanceof Error ? err.message : String(err);
-        redirect(res, `/?drive_error=${encodeURIComponent(message)}`);
+        ctx.response.redirect(`/?drive_error=${encodeURIComponent(message)}`);
         return;
       }
-      redirect(res, "/");
-      return;
-    }
-    if (req.method === "POST" && action === "logout") {
+      ctx.response.redirect("/");
+    })
+    .post("/logout", async (ctx) => {
       await drive.logout();
-      sendEmpty(res, 204);
-      return;
-    }
-    throw new HttpError(404, "not found");
+      ctx.response.status = Status.NoContent;
+    });
+
+/** POST /api/shutdown  レスポンスを返してからサーバーを終了する */
+const shutdownRouter = ({ onShutdown }: ApiDeps) =>
+  new Router().post("/api/shutdown", (ctx) => {
+    ctx.response.type = "text/plain";
+    ctx.response.body = "ok";
+    setTimeout(onShutdown, 100);
   });
+
+/** /api 以下を扱う Oak アプリケーション */
+export const createApiApp = (deps: ApiDeps): Application => {
+  const app = new Application();
+
+  // 例外を JSON のエラーレスポンスに変換する
+  app.use(async (ctx, next) => {
+    try {
+      await next();
+    } catch (err) {
+      const status = isHttpError(err) ? err.status : Status.InternalServerError;
+      if (status >= 500) console.error("[api]", err);
+      ctx.response.status = status;
+      ctx.response.body = { error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  for (const router of [
+    folderRouter(deps),
+    imageRouter(deps),
+    googleAuthRouter(deps),
+    shutdownRouter(deps),
+  ]) {
+    app.use(router.routes(), router.allowedMethods());
+  }
+
+  // どのルートにも一致しなかった場合も JSON で返す
+  app.use((ctx) => {
+    ctx.response.status = Status.NotFound;
+    ctx.response.body = { error: "not found" };
+  });
+
+  return app;
+};

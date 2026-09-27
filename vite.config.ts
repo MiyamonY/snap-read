@@ -3,26 +3,14 @@ import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { Store } from "./server/db.ts";
 import { DriveSync } from "./server/driveSync.ts";
-import { createFolderApi, createGoogleAuthApi, createImageApi } from "./server/api.ts";
-
-const shutdownPlugin = (): Plugin => ({
-  name: "shutdown-endpoint",
-  configureServer(server) {
-    server.middlewares.use("/api/shutdown", (_req, res) => {
-      res.writeHead(200, { "Content-Type": "text/plain" });
-      res.end("ok");
-      setTimeout(() => {
-        server.close();
-        process.exit(0);
-      }, 100);
-    });
-  },
-});
+import { createApiApp } from "./server/api.ts";
+import { oakMiddleware } from "./server/connect.ts";
 
 /**
- * フォルダ・チャット履歴・画像のパスを SQLite に、画像をローカルキャッシュ + Google ドライブに保存する API
+ * /api 以下を Oak で処理する。
+ * フォルダ・チャット履歴・画像のパスを SQLite に、画像をローカルキャッシュ + Google ドライブに保存する
  */
-const storagePlugin = (env: Record<string, string>): Plugin => {
+const apiPlugin = (env: Record<string, string>): Plugin => {
   let services: { store: Store; drive: DriveSync } | undefined;
   const getServices = () => {
     if (!services) {
@@ -48,21 +36,25 @@ const storagePlugin = (env: Record<string, string>): Plugin => {
     services = undefined;
   };
 
-  const mount = (middlewares: Connect.Server) => {
-    const { store, drive } = getServices();
-    middlewares.use("/api/folders", createFolderApi(store, drive));
-    middlewares.use("/api/images", createImageApi(drive));
-    middlewares.use("/api/auth/google", createGoogleAuthApi(drive));
+  const mount = (middlewares: Connect.Server, closeServer: () => Promise<void>) => {
+    const app = createApiApp({
+      ...getServices(),
+      onShutdown: async () => {
+        await closeServer();
+        process.exit(0);
+      },
+    });
+    middlewares.use(oakMiddleware(app, "/api/"));
   };
 
   return {
-    name: "snapread-storage",
+    name: "snapread-api",
     configureServer(server) {
-      mount(server.middlewares);
+      mount(server.middlewares, () => server.close());
       server.httpServer?.on("close", close);
     },
     configurePreviewServer(server) {
-      mount(server.middlewares);
+      mount(server.middlewares, () => server.close());
       server.httpServer.on("close", close);
     },
   };
@@ -73,7 +65,7 @@ export default defineConfig(({ mode }) => {
   // VITE_ 以外の変数（GOOGLE_CLIENT_SECRET など）はサーバー側でのみ使い、クライアントには渡さない
   const env = loadEnv(mode, process.cwd(), "");
   return {
-    plugins: [tailwindcss(), react({ compiler: true }), shutdownPlugin(), storagePlugin(env)],
+    plugins: [tailwindcss(), react({ compiler: true }), apiPlugin(env)],
     server: {
       host: "127.0.0.1",
       port: 5173,
