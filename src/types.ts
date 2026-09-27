@@ -66,3 +66,20 @@ export type FolderPatch = Omit<StoredFolder, "items" | "messages"> & {
   items?: CaptureItem[];
   messages?: ChatMessage[];
 };
+
+/** フォルダの単語帳に登録された単語（語義はフォルダ内の文脈に応じたもの） */
+export interface VocabularyEntry {
+  word: string;
+  phonetic?: string;
+  partOfSpeech: string;
+  meaning: string;
+  detail: string;
+  /** 単語が出てきた文 */
+  context: string;
+  addedAt: number;
+  /** 同じ単語を登録している他のフォルダ */
+  otherFolders: { id: string; name: string }[];
+}
+
+/** 単語帳への登録リクエスト */
+export type VocabularyInput = Omit<VocabularyEntry, "word" | "addedAt" | "otherFolders">;

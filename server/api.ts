@@ -1,5 +1,5 @@
 import { Application, createHttpError, isHttpError, Router, Status } from "@oak/oak";
-import type { FolderPatch } from "../src/types.ts";
+import type { FolderPatch, VocabularyInput } from "../src/types.ts";
 import type { Store } from "./db.ts";
 import type { DriveSync } from "./driveSync.ts";
 
@@ -17,6 +17,9 @@ interface ApiDeps {
  *   GET    /       全フォルダ（画像の参照・メッセージ込み）
  *   PUT    /:id    フォルダの保存
  *   DELETE /:id    フォルダの削除
+ *   GET    /:id/words         フォルダの単語帳
+ *   PUT    /:id/words/:word   単語の登録・更新
+ *   DELETE /:id/words/:word   単語の削除
  */
 const folderRouter = ({ store, drive }: ApiDeps) =>
   new Router({ prefix: "/api/folders" })
@@ -31,6 +34,23 @@ const folderRouter = ({ store, drive }: ApiDeps) =>
     })
     .delete("/:id", (ctx) => {
       drive.removeImageFiles(store.deleteFolder(ctx.params.id));
+      ctx.response.status = Status.NoContent;
+    })
+    .get("/:id/words", (ctx) => {
+      ctx.response.body = store.listFolderWords(ctx.params.id);
+    })
+    .put("/:id/words/:word", async (ctx) => {
+      const { id, word } = ctx.params;
+      if (!store.folderExists(id)) throw createHttpError(Status.NotFound, "folder not found");
+      const input = (await ctx.request.body.json()) as VocabularyInput;
+      if (!input.meaning || !input.partOfSpeech) {
+        throw createHttpError(Status.BadRequest, "meaning and partOfSpeech are required");
+      }
+      store.saveFolderWord(id, word, input);
+      ctx.response.status = Status.NoContent;
+    })
+    .delete("/:id/words/:word", (ctx) => {
+      store.deleteFolderWord(ctx.params.id, ctx.params.word);
       ctx.response.status = Status.NoContent;
     });
 

@@ -10,11 +10,29 @@ import {
   RotateCcw,
   Sparkles,
   Loader2,
+  BookMarked,
 } from "lucide-react";
-import type { AnalysisPreset, ChatMessage, CaptureItem } from "../types.ts";
+import type {
+  AnalysisPreset,
+  ChatMessage,
+  CaptureItem,
+  VocabularyEntry,
+  VocabularyInput,
+} from "../types.ts";
 import { PRESET_PROMPTS } from "../services/gemini.ts";
 import { itemImageUrl } from "../services/imageApi.ts";
 import { InteractiveReader } from "./InteractiveReader.tsx";
+import { VocabularyList } from "./VocabularyList.tsx";
+
+export interface VocabularyProps {
+  words: VocabularyEntry[];
+  savedWords: Set<string>;
+  isLoading: boolean;
+  error: string | null;
+  onSave: (word: string, input: VocabularyInput) => void;
+  onRemove: (word: string) => void;
+  onSelectFolder: (folderId: string) => void;
+}
 
 interface AnalysisPanelProps {
   items: CaptureItem[];
@@ -28,6 +46,7 @@ interface AnalysisPanelProps {
   ocrText: string;
   isOcrLoading: boolean;
   onExtractOcr: () => void;
+  vocabulary: VocabularyProps;
 }
 
 const renderFormattedInline = (text: string) => {
@@ -108,8 +127,9 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
   ocrText,
   isOcrLoading,
   onExtractOcr,
+  vocabulary,
 }) => {
-  const [activeTab, setActiveTab] = useState<"reader" | "ai">(() =>
+  const [activeTab, setActiveTab] = useState<"reader" | "vocab" | "ai">(() =>
     messages.length > 0 ? "ai" : "reader",
   );
   const [inputText, setInputText] = useState("");
@@ -176,6 +196,24 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             <span>📖 テキスト読解 & 辞書</span>
             {ocrText && (
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
+            )}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("vocab")}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-md text-xs font-medium transition-all cursor-pointer ${
+              activeTab === "vocab"
+                ? "bg-indigo-600 text-white shadow-xs"
+                : "text-slate-400 hover:text-white hover:bg-slate-800/60"
+            }`}
+          >
+            <BookMarked className="w-3.5 h-3.5" />
+            <span>単語帳</span>
+            {vocabulary.words.length > 0 && (
+              <span className="text-[10px] px-1 py-0.2 rounded-full bg-emerald-500/30 text-emerald-200 font-mono">
+                {vocabulary.words.length}
+              </span>
             )}
           </button>
 
@@ -274,6 +312,17 @@ export const AnalysisPanel: React.FC<AnalysisPanelProps> = ({
             onExtractOcr={onExtractOcr}
             onAskAboutWord={handleAskAboutWord}
             hasImages={hasImages}
+            savedWords={vocabulary.savedWords}
+            onSaveWord={vocabulary.onSave}
+            onRemoveWord={vocabulary.onRemove}
+          />
+        ) : activeTab === "vocab" ? (
+          <VocabularyList
+            words={vocabulary.words}
+            isLoading={vocabulary.isLoading}
+            error={vocabulary.error}
+            onRemove={vocabulary.onRemove}
+            onSelectFolder={vocabulary.onSelectFolder}
           />
         ) : (
           /* AI Analysis & Chat Tab View */

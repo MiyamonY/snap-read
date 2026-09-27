@@ -1,6 +1,16 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
-import { FileText, Sparkles, Loader2, Copy, Check, RotateCcw, X } from "lucide-react";
-import type { WordDefinition } from "../types.ts";
+import {
+  FileText,
+  Sparkles,
+  Loader2,
+  Copy,
+  Check,
+  RotateCcw,
+  X,
+  BookmarkPlus,
+  BookmarkCheck,
+} from "lucide-react";
+import type { VocabularyInput, WordDefinition } from "../types.ts";
 import { geminiService } from "../services/gemini.ts";
 
 interface InteractiveReaderProps {
@@ -9,6 +19,10 @@ interface InteractiveReaderProps {
   onExtractOcr: () => void;
   onAskAboutWord: (word: string, meaning: string) => void;
   hasImages: boolean;
+  /** 単語帳に登録済みの単語（小文字） */
+  savedWords: Set<string>;
+  onSaveWord: (word: string, input: VocabularyInput) => void;
+  onRemoveWord: (word: string) => void;
 }
 
 export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
@@ -17,8 +31,12 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
   onExtractOcr,
   onAskAboutWord,
   hasImages,
+  savedWords,
+  onSaveWord,
+  onRemoveWord,
 }) => {
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
+  const [selectedContext, setSelectedContext] = useState("");
   const [definition, setDefinition] = useState<WordDefinition | null>(null);
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -48,6 +66,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
       if (!clean) return;
 
       setSelectedWord(clean);
+      setSelectedContext(sentenceContext);
 
       // Compute popover position relative to container
       const rect = e.currentTarget.getBoundingClientRect();
@@ -125,6 +144,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
             const word = match[2];
             const suffix = match[3];
             const isSelected = selectedWord?.toLowerCase() === word.toLowerCase();
+            const isSaved = savedWords.has(word.toLowerCase());
 
             return (
               <React.Fragment key={tIdx}>
@@ -135,9 +155,15 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
                   className={`interactive-word inline-block cursor-pointer rounded px-0.5 transition-all select-text ${
                     isSelected
                       ? "bg-indigo-600 text-white font-medium shadow-xs ring-2 ring-indigo-400/50"
-                      : "hover:bg-indigo-500/25 hover:text-indigo-200 hover:underline underline-offset-3 decoration-indigo-400/60"
+                      : isSaved
+                        ? "text-emerald-200 underline decoration-emerald-400/70 decoration-2 underline-offset-3 hover:bg-emerald-500/20"
+                        : "hover:bg-indigo-500/25 hover:text-indigo-200 hover:underline underline-offset-3 decoration-indigo-400/60"
                   }`}
-                  title="クリックして日本語の語義を表示"
+                  title={
+                    isSaved
+                      ? "単語帳に登録済み（クリックで語義を表示）"
+                      : "クリックして日本語の語義を表示"
+                  }
                 >
                   {word}
                 </button>
@@ -321,6 +347,36 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
                   <p className="text-[11px] text-slate-300 leading-relaxed bg-slate-950/60 p-2 rounded-lg border border-slate-800/80">
                     {definition.detail}
                   </p>
+                )}
+
+                {/* Save to / remove from the folder's vocabulary list */}
+                {savedWords.has(definition.word.toLowerCase()) ? (
+                  <button
+                    type="button"
+                    onClick={() => onRemoveWord(definition.word)}
+                    className="w-full mt-1.5 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/15 hover:bg-rose-500/20 text-emerald-300 hover:text-rose-300 text-[11px] font-medium transition-colors cursor-pointer"
+                    title="クリックで単語帳から削除"
+                  >
+                    <BookmarkCheck className="w-3 h-3" />
+                    <span>単語帳に登録済み</span>
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onSaveWord(definition.word, {
+                        phonetic: definition.phonetic,
+                        partOfSpeech: definition.partOfSpeech,
+                        meaning: definition.meaning,
+                        detail: definition.detail,
+                        context: selectedContext,
+                      })
+                    }
+                    className="w-full mt-1.5 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-emerald-600 text-slate-300 hover:text-white text-[11px] font-medium transition-colors cursor-pointer"
+                  >
+                    <BookmarkPlus className="w-3 h-3" />
+                    <span>単語帳に追加</span>
+                  </button>
                 )}
 
                 {/* Ask Gemini about this word */}

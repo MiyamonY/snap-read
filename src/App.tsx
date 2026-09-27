@@ -9,6 +9,7 @@ import { ImageTray } from "./components/ImageTray.tsx";
 import { FolderBar } from "./components/FolderBar.tsx";
 import { useMediaStream } from "./hooks/useMediaStream.ts";
 import { useFolders } from "./hooks/useFolders.ts";
+import { useFolderWords } from "./hooks/useFolderWords.ts";
 import { geminiService, DEFAULT_MODEL } from "./services/gemini.ts";
 import { imageApi, itemImageUrl } from "./services/imageApi.ts";
 import { errorMessage } from "./utils.ts";
@@ -64,6 +65,7 @@ export const App: React.FC = () => {
     renameFolder,
     deleteFolder,
   } = useFolders();
+  const vocabulary = useFolderWords(folder?.id);
   const [viewMode, setViewMode] = useState<"stream" | "crop">("stream");
   const [notice, setNotice] = useState<string | null>(driveErrorFromUrl);
 
@@ -408,6 +410,15 @@ export const App: React.FC = () => {
             ocrText={folder.ocrText}
             isOcrLoading={folder.isOcrLoading}
             onExtractOcr={handleExtractOcr}
+            vocabulary={{
+              words: vocabulary.words,
+              savedWords: vocabulary.savedWords,
+              isLoading: vocabulary.isLoading,
+              error: vocabulary.error,
+              onSave: vocabulary.addWord,
+              onRemove: vocabulary.removeWord,
+              onSelectFolder: handleSelectFolder,
+            }}
           />
         </div>
 

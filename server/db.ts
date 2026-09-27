@@ -8,6 +8,8 @@ import type {
   FolderPatch,
   SourceMode,
   StoredFolder,
+  VocabularyEntry,
+  VocabularyInput,
 } from "../src/types.ts";
 
 const SCHEMA = `
@@ -68,6 +70,26 @@ CREATE TABLE IF NOT EXISTS drive_trash_queue (
   drive_file_id TEXT PRIMARY KEY
 );
 
+-- 単語帳: 単語そのものと、フォルダとの関連（多対多）。語義は文脈に依存するため関連側に持つ
+CREATE TABLE IF NOT EXISTS words (
+  id         INTEGER PRIMARY KEY,
+  word       TEXT NOT NULL UNIQUE COLLATE NOCASE,
+  phonetic   TEXT,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS folder_words (
+  folder_id      TEXT NOT NULL REFERENCES folders(id) ON DELETE CASCADE,
+  word_id        INTEGER NOT NULL REFERENCES words(id) ON DELETE CASCADE,
+  part_of_speech TEXT NOT NULL,
+  meaning        TEXT NOT NULL,
+  detail         TEXT NOT NULL DEFAULT '',
+  context        TEXT NOT NULL DEFAULT '',
+  added_at       INTEGER NOT NULL,
+  PRIMARY KEY (folder_id, word_id)
+);
+CREATE INDEX IF NOT EXISTS folder_words_word ON folder_words(word_id);
+
 CREATE TABLE IF NOT EXISTS settings (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
@@ -104,6 +126,17 @@ interface ItemRow {
   cropped_image_id: string | null;
   source: string;
   timestamp: number;
+}
+
+interface FolderWordRow {
+  word_id: number;
+  word: string;
+  phonetic: string | null;
+  part_of_speech: string;
+  meaning: string;
+  detail: string;
+  context: string;
+  added_at: number;
 }
 
 interface MessageRow {
@@ -271,6 +304,7 @@ export class Store {
         this.enqueueDriveTrash(folder.drive_folder_id);
       }
       this.db.prepare("DELETE FROM folders WHERE id = ?").run(id);
+      this.deleteOrphanWords();
       return images;
     });
   }
@@ -294,6 +328,95 @@ export class Store {
     this.db
       .prepare("UPDATE folders SET drive_folder_id = ?, drive_folder_name = ? WHERE id = ?")
       .run(driveFolderId, name, folderId);
+  }
+
+  folderExists(id: string): boolean {
+    return this.get<{ id: string }>("SELECT id FROM folders WHERE id = ?", id) !== undefined;
+  }
+
+  // ---- vocabulary ----
+
+  listFolderWords(folderId: string): VocabularyEntry[] {
+    const rows = this.all<FolderWordRow>(
+      `SELECT w.id AS word_id, w.word, w.phonetic, fw.part_of_speech, fw.meaning, fw.detail,
+              fw.context, fw.added_at
+       FROM folder_words fw JOIN words w ON w.id = fw.word_id
+       WHERE fw.folder_id = ?
+       ORDER BY fw.added_at DESC`,
+      folderId,
+    );
+    const others = this.all<{ word_id: number; id: string; name: string }>(
+      `SELECT fw.word_id, f.id, f.name
+       FROM folder_words fw JOIN folders f ON f.id = fw.folder_id
+       WHERE fw.folder_id != ?
+         AND fw.word_id IN (SELECT word_id FROM folder_words WHERE folder_id = ?)
+       ORDER BY f.sort_order`,
+      folderId,
+      folderId,
+    );
+    return rows.map((row) => ({
+      word: row.word,
+      phonetic: row.phonetic ?? undefined,
+      partOfSpeech: row.part_of_speech,
+      meaning: row.meaning,
+      detail: row.detail,
+      context: row.context,
+      addedAt: row.added_at,
+      otherFolders: others
+        .filter((o) => o.word_id === row.word_id)
+        .map((o) => ({ id: o.id, name: o.name })),
+    }));
+  }
+
+  /** 単語をフォルダの単語帳に登録する（登録済みなら語義を更新する） */
+  saveFolderWord(folderId: string, word: string, input: VocabularyInput): void {
+    this.transaction(() => {
+      this.db
+        .prepare(
+          `INSERT INTO words (word, phonetic, created_at) VALUES (?, ?, ?)
+           ON CONFLICT(word) DO UPDATE SET phonetic = coalesce(excluded.phonetic, words.phonetic)`,
+        )
+        .run(word.toLowerCase(), input.phonetic ?? null, Date.now());
+      const { id } = this.get<{ id: number }>("SELECT id FROM words WHERE word = ?", word) ?? {};
+      if (id === undefined) throw new Error(`failed to save word: ${word}`);
+      this.db
+        .prepare(
+          `INSERT INTO folder_words
+             (folder_id, word_id, part_of_speech, meaning, detail, context, added_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(folder_id, word_id) DO UPDATE SET
+             part_of_speech = excluded.part_of_speech,
+             meaning = excluded.meaning,
+             detail = excluded.detail,
+             context = excluded.context`,
+        )
+        .run(
+          folderId,
+          id,
+          input.partOfSpeech,
+          input.meaning,
+          input.detail,
+          input.context,
+          Date.now(),
+        );
+    });
+  }
+
+  deleteFolderWord(folderId: string, word: string): void {
+    this.transaction(() => {
+      this.db
+        .prepare(
+          `DELETE FROM folder_words
+           WHERE folder_id = ? AND word_id = (SELECT id FROM words WHERE word = ?)`,
+        )
+        .run(folderId, word);
+      this.deleteOrphanWords();
+    });
+  }
+
+  /** どのフォルダからも参照されなくなった単語を削除する */
+  private deleteOrphanWords(): void {
+    this.db.exec("DELETE FROM words WHERE id NOT IN (SELECT word_id FROM folder_words)");
   }
 
   // ---- images ----
