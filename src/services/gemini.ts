@@ -71,6 +71,17 @@ async function collectTextStream(
   return { fullText, interactionId };
 }
 
+const OCR_RULES = `出力ルール:
+- 段落の途中の改行（画像内での行の折り返し）は削除し、1つの段落は1行につなげる。1文ごとに改行しない
+- 行末のハイフンで分割された単語は元の1語に戻す（例: "infor-" と "mation" → "information"）
+- 段落と段落、見出しと本文の間は空行（改行2つ）で区切る
+- 記事のタイトル・見出し・リード文・本文のみを出力する。次のものは出力しない:
+  - ヘッダー、フッター、ページ番号、柱（ランニングヘッド）、著作権表示
+  - 写真や図のキャプション、写真クレジット（例: "ALEX WONG/GETTY"）
+  - 雑誌・新聞のコーナー名やセクション名（例: "NEWS, OPINION + ANALYSIS"）、著者名の表記（例: "BY ..."）
+  - 広告、ナビゲーションやメニュー、ボタンなどの UI 要素、SNS の共有ボタン、Cookie の案内
+- 挨拶・前置き・注釈・Markdown 記法は付けず、英文テキストのみを出力する`;
+
 export class GeminiService {
   private client: GoogleGenAI | null = null;
   private currentApiKey: string = "";
@@ -121,8 +132,13 @@ export class GeminiService {
 
     const prompt =
       base64DataUrls.length > 1
-        ? "これらの画像に含まれているすべての英文を、画像順・段落順に正確に文字起こし（OCR）してください。挨拶や注釈は含めず、純粋な英文テキストのみ（必要に応じて[画像1]などの見出し）を出力してください。"
-        : "この画像に含まれているすべての英文を、元の段落や改行を保ちながら正確に文字起こし（OCR）してください。挨拶や注釈は含めず、純粋な英文テキストのみを出力してください。";
+        ? `これらの画像に含まれている本文の英文を、画像順・段落順に正確に文字起こし（OCR）してください。
+
+${OCR_RULES}
+- 画像ごとに、その画像の本文の前に [画像1] のような見出しを1行で付ける`
+        : `この画像に含まれている本文の英文を、段落順に正確に文字起こし（OCR）してください。
+
+${OCR_RULES}`;
 
     const interaction = await this.client.interactions.create({
       model: modelName,
@@ -155,7 +171,7 @@ export class GeminiService {
       throw new Error("Gemini APIキーが設定されていません。");
     }
 
-    const prompt = `次の英単語の日本語の語義を、文脈に合わせて教えてください。
+    const prompt = `次の英単語または熟語（句動詞・連語など複数語の表現を含む）の日本語の語義を、文脈に合わせて教えてください。
 必ず以下のJSONフォーマットのみを返してください（Markdownコードブロックも不要、純粋なJSON文字列のみ）：
 
 {
@@ -166,7 +182,7 @@ export class GeminiService {
   "phonetic": "発音目安（カタカナまたは発音記号）"
 }
 
-英単語: "${cleanWord}"
+英単語・熟語: "${cleanWord}"
 文脈（前後の文）: "${contextSentence}"`;
 
     try {

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import {
   FileText,
   Sparkles,
@@ -12,6 +12,55 @@ import {
 } from "lucide-react";
 import type { VocabularyInput, WordDefinition } from "../types.ts";
 import { geminiService } from "../services/gemini.ts";
+import { normalizeOcrText } from "../services/ocrText.ts";
+
+type ColumnCount = 1 | 2 | 4;
+
+const COLUMN_OPTIONS: ColumnCount[] = [1, 2, 4];
+const COLUMNS_STORAGE_KEY = "snapread_reader_columns";
+
+const COLUMN_CLASSES: Record<ColumnCount, string> = {
+  1: "columns-1",
+  2: "columns-2 gap-8 [column-rule:1px_solid_var(--color-slate-800)]",
+  4: "columns-4 gap-6 [column-rule:1px_solid_var(--color-slate-800)]",
+};
+
+/** 英単語（前後の記号付き）: 例 "“word,” */
+const WORD_TOKEN = /^([^a-zA-Z]*)([a-zA-Z]+(?:['’-][a-zA-Z]+)*)([^a-zA-Z]*)$/u;
+
+const tokenize = (paragraph: string) => paragraph.split(/(\s+)/u);
+
+const cleanPhrase = (text: string) =>
+  text.replaceAll(/^[^a-zA-Z]+|[^a-zA-Z]+$/gu, "").replaceAll(/\s+/gu, " ");
+
+/** 段落内で、単語帳に登録済みの熟語（2語以上）に含まれるトークンの位置 */
+const findSavedPhraseTokens = (tokens: string[], phrases: string[][]): Set<number> => {
+  const words = tokens.flatMap((token, index) => {
+    const match = token.match(WORD_TOKEN);
+    return match ? [{ index, word: match[2].toLowerCase() }] : [];
+  });
+  const hits = new Set<number>();
+  for (const phrase of phrases) {
+    for (let start = 0; start + phrase.length <= words.length; start++) {
+      if (phrase.every((w, k) => words[start + k].word === w)) {
+        for (let k = 0; k < phrase.length; k++) hits.add(words[start + k].index);
+      }
+    }
+  }
+  return hits;
+};
+
+/** 選択中の範囲（段落番号とトークン位置） */
+interface TokenSelection {
+  paraIdx: number;
+  start: number;
+  end: number;
+}
+
+const loadColumnCount = (): ColumnCount => {
+  const saved = Number(localStorage.getItem(COLUMNS_STORAGE_KEY));
+  return COLUMN_OPTIONS.find((n) => n === saved) ?? 1;
+};
 
 interface InteractiveReaderProps {
   ocrText: string;
@@ -36,15 +85,30 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
   onRemoveWord,
 }) => {
   const [selectedWord, setSelectedWord] = useState<string | null>(null);
+  const [selection, setSelection] = useState<TokenSelection | null>(null);
   const [selectedContext, setSelectedContext] = useState("");
   const [definition, setDefinition] = useState<WordDefinition | null>(null);
   const [isLookingUp, setIsLookingUp] = useState(false);
   const [copied, setCopied] = useState(false);
   const [fontSize, setFontSize] = useState<"sm" | "base" | "lg">("base");
+  const [columnCount, setColumnCount] = useState<ColumnCount>(loadColumnCount);
+
+  const changeColumnCount = (count: ColumnCount) => {
+    setColumnCount(count);
+    localStorage.setItem(COLUMNS_STORAGE_KEY, String(count));
+  };
 
   // Popover position
   const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  // 後から始めた検索の結果を、先に始めた検索の結果で上書きしないための通し番号
+  const lookupSeqRef = useRef(0);
+
+  const closePopover = () => {
+    setSelectedWord(null);
+    setSelection(null);
+    setPopoverPos(null);
+  };
 
   // Close popover on outside click
   useEffect(() => {
@@ -52,6 +116,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
       const target = e.target as HTMLElement;
       if (!target.closest(".word-popover") && !target.closest(".interactive-word")) {
         setSelectedWord(null);
+        setSelection(null);
         setPopoverPos(null);
       }
     };
@@ -59,53 +124,112 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Handle word click
-  const handleWordClick = useCallback(
-    async (word: string, sentenceContext: string, e: React.MouseEvent<HTMLButtonElement>) => {
-      const clean = word.replaceAll(/^[^a-zA-Z]+|[^a-zA-Z]+$/gu, "");
-      if (!clean) return;
+  /** 語義を検索してポップアップを表示する（rect: 選択範囲の表示位置） */
+  const openLookup = async (text: string, context: string, rect: DOMRect) => {
+    const container = containerRef.current;
+    if (!container) return;
 
-      setSelectedWord(clean);
-      setSelectedContext(sentenceContext);
+    setSelectedWord(text);
+    setSelectedContext(context);
 
-      // Compute popover position relative to container
-      const rect = e.currentTarget.getBoundingClientRect();
-      const containerRect = containerRef.current?.getBoundingClientRect() || { top: 0, left: 0 };
+    // Position above the selection, relative to the (scrollable) container
+    const containerRect = container.getBoundingClientRect();
+    const top = rect.top - containerRect.top + container.scrollTop;
+    const left = rect.left - containerRect.left + container.scrollLeft + rect.width / 2;
+    setPopoverPos({
+      top: Math.max(10, top - 130),
+      left: Math.max(
+        container.scrollLeft + 10,
+        Math.min(left - 144, container.scrollLeft + container.clientWidth - 290),
+      ),
+    });
+    setIsLookingUp(true);
+    setDefinition(null);
 
-      // Position above word by default, or below if too close to top
-      const top = rect.top - containerRect.top + (containerRef.current?.scrollTop || 0);
-      const left =
-        rect.left - containerRect.left + (containerRef.current?.scrollLeft || 0) + rect.width / 2;
+    lookupSeqRef.current += 1;
+    const seq = lookupSeqRef.current;
+    let def: WordDefinition | null = null;
+    try {
+      def = await geminiService.lookupWordDefinition(text, context);
+    } catch (err) {
+      console.error("Lookup error:", err);
+    }
+    if (seq !== lookupSeqRef.current) return;
+    setDefinition(def);
+    setIsLookingUp(false);
+  };
 
-      const containerWidth = containerRef.current?.clientWidth || 300;
-      setPopoverPos({
-        top: Math.max(10, top - 130),
-        left: Math.max(10, Math.min(left - 144, containerWidth - 290)),
-      });
-      setIsLookingUp(true);
-      setDefinition(null);
+  /** 単語クリック。Shift+クリックで同じ段落内の選択範囲を広げ、熟語として検索する */
+  const handleWordClick = (
+    paraIdx: number,
+    tokenIdx: number,
+    paragraph: string,
+    wordElement: HTMLElement,
+    shiftKey: boolean,
+  ) => {
+    const extend = shiftKey && selection?.paraIdx === paraIdx;
+    const range = extend
+      ? { start: Math.min(selection.start, tokenIdx), end: Math.max(selection.end, tokenIdx) }
+      : { start: tokenIdx, end: tokenIdx };
+    if (shiftKey) {
+      // Shift+クリックで広がるブラウザのテキスト選択は使わない
+      globalThis.getSelection()?.removeAllRanges();
+    }
+    const text = cleanPhrase(
+      tokenize(paragraph)
+        .slice(range.start, range.end + 1)
+        .join(""),
+    );
+    if (!text) return;
+    setSelection({ paraIdx, ...range });
+    openLookup(text, paragraph, wordElement.getBoundingClientRect());
+  };
 
-      try {
-        const def = await geminiService.lookupWordDefinition(clean, sentenceContext);
-        setDefinition(def);
-      } catch (err) {
-        console.error("Lookup error:", err);
-      }
-      setIsLookingUp(false);
-    },
-    [],
-  );
+  /**
+   * 本文のクリック。単語は（ドラッグでの範囲選択ができるよう）ボタンではなくテキストで描画し、
+   * クリックされた単語は data 属性から特定する
+   */
+  const handleTextClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    const wordElement = (e.target as HTMLElement).closest<HTMLElement>("[data-token]");
+    if (!wordElement) return;
+    const paraIdx = Number(wordElement.dataset.para);
+    const tokenIdx = Number(wordElement.dataset.token);
+    const paragraph = normalizeOcrText(ocrText).split("\n\n")[paraIdx] ?? "";
+    handleWordClick(paraIdx, tokenIdx, paragraph, wordElement, e.shiftKey);
+  };
+
+  /** ドラッグで複数語を選択した場合は、その熟語を検索する */
+  const handleTextMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Shift+クリックはクリック側で熟語として扱う（ブラウザの選択範囲の拡張とは二重に検索しない）
+    if (e.shiftKey) return;
+    const nativeSelection = globalThis.getSelection();
+    if (!nativeSelection || nativeSelection.isCollapsed) return;
+    const text = cleanPhrase(nativeSelection.toString());
+    // 1語はクリックで扱う。長すぎる範囲は熟語とみなさない
+    if (!text.includes(" ") || text.split(" ").length > 8) return;
+    const range = nativeSelection.getRangeAt(0);
+    const paragraph = range.startContainer.parentElement?.closest("p")?.textContent ?? "";
+    setSelection(null);
+    openLookup(text, paragraph, range.getBoundingClientRect());
+  };
+
+  /** 段組み表示では縦ホイールで横にスクロールする */
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (columnCount === 1 || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    e.currentTarget.scrollLeft += e.deltaY;
+  };
 
   const handleCopy = () => {
     if (!ocrText) return;
-    navigator.clipboard.writeText(ocrText);
+    navigator.clipboard.writeText(normalizeOcrText(ocrText));
     setCopied(true);
     setTimeout(() => setCopied(false), 1500);
   };
 
   // Render text with clickable words
   const renderInteractiveText = (text: string) => {
-    const paragraphs = text.split(/\n\s*\n|\n/u);
+    const paragraphs = normalizeOcrText(text).split("\n\n");
+    const savedPhrases = [...savedWords].filter((w) => w.includes(" ")).map((w) => w.split(" "));
 
     return paragraphs.map((para, pIdx) => {
       if (!para.trim()) return <div key={pIdx} className="h-3" />;
@@ -115,7 +239,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
         return (
           <div
             key={pIdx}
-            className="text-xs font-mono font-bold text-indigo-400 mt-4 mb-1.5 flex items-center gap-1.5"
+            className="text-xs font-mono font-bold text-indigo-400 mt-4 first:mt-0 mb-1.5 flex items-center gap-1.5 break-after-avoid"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-indigo-500" />
             {para}
@@ -124,10 +248,11 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
       }
 
       // Split into words and punctuation
-      const tokens = para.split(/(\s+)/u);
+      const tokens = tokenize(para);
+      const savedPhraseTokens = findSavedPhraseTokens(tokens, savedPhrases);
 
       return (
-        <p key={pIdx} className="my-2 leading-relaxed text-slate-200">
+        <p key={pIdx} className="indent-[2ch] leading-relaxed text-slate-200">
           {tokens.map((token, tIdx) => {
             // Whitespace
             if (/^\s+$/u.test(token)) {
@@ -135,7 +260,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
             }
 
             // Word with potential punctuation: e.g. "word,"
-            const match = token.match(/^([^a-zA-Z]*)([a-zA-Z]+(?:['’-][a-zA-Z]+)*)([^a-zA-Z]*)$/u);
+            const match = token.match(WORD_TOKEN);
             if (!match) {
               return <span key={tIdx}>{token}</span>;
             }
@@ -143,16 +268,17 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
             const prefix = match[1];
             const word = match[2];
             const suffix = match[3];
-            const isSelected = selectedWord?.toLowerCase() === word.toLowerCase();
-            const isSaved = savedWords.has(word.toLowerCase());
+            const isSelected =
+              selection?.paraIdx === pIdx && tIdx >= selection.start && tIdx <= selection.end;
+            const isSaved = savedWords.has(word.toLowerCase()) || savedPhraseTokens.has(tIdx);
 
             return (
-              <React.Fragment key={tIdx}>
+              <span key={tIdx} className="whitespace-nowrap">
                 {prefix}
-                <button
-                  type="button"
-                  onClick={(e) => handleWordClick(word, para, e)}
-                  className={`interactive-word inline-block cursor-pointer rounded px-0.5 transition-all select-text ${
+                <span
+                  data-para={pIdx}
+                  data-token={tIdx}
+                  className={`interactive-word cursor-pointer rounded transition-colors select-text ${
                     isSelected
                       ? "bg-indigo-600 text-white font-medium shadow-xs ring-2 ring-indigo-400/50"
                       : isSaved
@@ -162,13 +288,13 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
                   title={
                     isSaved
                       ? "単語帳に登録済み（クリックで語義を表示）"
-                      : "クリックして日本語の語義を表示"
+                      : "クリックで語義を表示（Shift+クリックで熟語を選択）"
                   }
                 >
                   {word}
-                </button>
+                </span>
                 {suffix}
-              </React.Fragment>
+              </span>
             );
           })}
         </p>
@@ -190,7 +316,9 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
           <FileText className="w-3.5 h-3.5 text-indigo-400" />
           <span className="font-medium text-slate-300">インタラクティブテキスト読解</span>
           {ocrText && (
-            <span className="text-[10px] text-slate-500">（単語をクリックで辞書表示）</span>
+            <span className="text-[10px] text-slate-500">
+              （単語をクリックで辞書表示・Shift+クリックかドラッグで熟語）
+            </span>
           )}
         </div>
 
@@ -223,6 +351,24 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
             </button>
           </div>
 
+          {/* Column layout controls */}
+          <div
+            className="flex items-center bg-slate-900 border border-slate-800 rounded-md p-0.5 mr-2"
+            title="段組み"
+          >
+            {COLUMN_OPTIONS.map((count) => (
+              <button
+                type="button"
+                key={count}
+                onClick={() => changeColumnCount(count)}
+                className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${columnCount === count ? "bg-indigo-600 text-white" : "text-slate-400 hover:text-white"}`}
+                title={`${count}段組み`}
+              >
+                {count}段
+              </button>
+            ))}
+          </div>
+
           {ocrText && (
             <>
               <button
@@ -253,7 +399,13 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
       </div>
 
       {/* Main Reader View */}
-      <div ref={containerRef} className={`relative flex-1 p-5 overflow-y-auto ${fontSizeClass}`}>
+      <div
+        ref={containerRef}
+        onWheel={handleWheel}
+        className={`relative flex-1 min-h-0 p-5 ${
+          columnCount === 1 ? "overflow-y-auto" : "overflow-x-auto overflow-y-hidden"
+        } ${fontSizeClass}`}
+      >
         {isOcrLoading ? (
           <div className="flex flex-col items-center justify-center h-48 space-y-3 text-center">
             <Loader2 className="w-6 h-6 animate-spin text-indigo-400" />
@@ -265,7 +417,14 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
             </span>
           </div>
         ) : ocrText ? (
-          <div className="font-sans antialiased max-w-none select-text">
+          // oxlint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events -- 単語のクリックとテキスト範囲選択（マウス操作）を拾う
+          <div
+            onClick={handleTextClick}
+            onMouseUp={handleTextMouseUp}
+            className={`font-sans antialiased max-w-none select-text ${COLUMN_CLASSES[columnCount]} ${
+              columnCount === 1 ? "" : "h-full [column-fill:auto]"
+            }`}
+          >
             {renderInteractiveText(ocrText)}
           </div>
         ) : (
@@ -318,10 +477,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
               </div>
               <button
                 type="button"
-                onClick={() => {
-                  setSelectedWord(null);
-                  setPopoverPos(null);
-                }}
+                onClick={closePopover}
                 className="text-slate-400 hover:text-white p-0.5 rounded hover:bg-slate-800"
               >
                 <X className="w-3.5 h-3.5" />
@@ -384,8 +540,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
                   type="button"
                   onClick={() => {
                     onAskAboutWord(definition.word, definition.meaning);
-                    setSelectedWord(null);
-                    setPopoverPos(null);
+                    closePopover();
                   }}
                   className="w-full mt-1.5 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white text-[11px] font-medium transition-colors cursor-pointer"
                 >

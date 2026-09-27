@@ -12,6 +12,7 @@ import { useFolders } from "./hooks/useFolders.ts";
 import { useFolderWords } from "./hooks/useFolderWords.ts";
 import { geminiService, DEFAULT_MODEL } from "./services/gemini.ts";
 import { imageApi, itemImageUrl } from "./services/imageApi.ts";
+import { normalizeOcrText } from "./services/ocrText.ts";
 import { errorMessage } from "./utils.ts";
 import type { AnalysisPreset, ChatMessage, CaptureItem, Folder } from "./types.ts";
 
@@ -142,7 +143,7 @@ export const App: React.FC = () => {
     let ocrText: string;
     try {
       const images = await loadImagesForGemini(folder);
-      ocrText = await geminiService.extractTextFromImages(images, DEFAULT_MODEL);
+      ocrText = normalizeOcrText(await geminiService.extractTextFromImages(images, DEFAULT_MODEL));
     } catch (err) {
       console.error("OCR extraction failed:", err);
       ocrText = `⚠️ テキスト抽出エラー: ${errorMessage(err)}`;
