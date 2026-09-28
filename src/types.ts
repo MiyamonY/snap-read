@@ -86,3 +86,20 @@ export type VocabularyInput = Omit<VocabularyEntry, "word" | "addedAt" | "otherF
 
 /** メイン画面のタブ（テキスト読解 / 単語帳） */
 export type MainTab = "reader" | "vocab";
+
+/** OCR で認識した単語と、画像内での位置（画像の幅・高さに対する 0〜1 の割合） */
+export interface OcrWord {
+  text: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** 所属する段落（OcrLayout.paragraphs の添字） */
+  paragraph: number;
+}
+
+/** 1枚の画像の OCR 結果のレイアウト（画像上にテキストを重ねるために使う） */
+export interface OcrLayout {
+  paragraphs: string[];
+  words: OcrWord[];
+}

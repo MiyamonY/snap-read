@@ -1,3 +1,5 @@
+import type { OcrLayout, OcrWord } from "../src/types.ts";
+
 const ANNOTATE_ENDPOINT = "https://vision.googleapis.com/v1/images:annotate";
 /** images:annotate の1リクエストあたりの画像数の上限 */
 const MAX_IMAGES_PER_REQUEST = 16;
@@ -9,8 +11,18 @@ interface VisionSymbol {
   property?: { detectedBreak?: { type: BreakType } };
 }
 
+interface BoundingPoly {
+  /** 座標が 0 の場合は x / y が省略される */
+  vertices?: { x?: number; y?: number }[];
+}
+
+interface VisionWord {
+  boundingBox?: BoundingPoly;
+  symbols?: VisionSymbol[];
+}
+
 interface VisionParagraph {
-  words?: { symbols?: VisionSymbol[] }[];
+  words?: VisionWord[];
 }
 
 interface VisionBlock {
@@ -18,9 +30,15 @@ interface VisionBlock {
   paragraphs?: VisionParagraph[];
 }
 
+interface VisionPage {
+  width?: number;
+  height?: number;
+  blocks?: VisionBlock[];
+}
+
 interface AnnotateResponse {
   responses?: {
-    fullTextAnnotation?: { pages?: { blocks?: VisionBlock[] }[] };
+    fullTextAnnotation?: { pages?: VisionPage[] };
     error?: { message: string };
   }[];
 }
@@ -49,23 +67,58 @@ const paragraphText = (paragraph: VisionParagraph): string => {
   return text.trim();
 };
 
-/** 1枚分の OCR 結果を、段落ごとに空行で区切ったテキストにする */
-const annotationText = (pages: { blocks?: VisionBlock[] }[]): string =>
-  pages
-    .flatMap((page) => page.blocks ?? [])
+const textParagraphs = (page: VisionPage): VisionParagraph[] =>
+  (page.blocks ?? [])
     .filter((block) => !block.blockType || block.blockType === "TEXT")
-    .flatMap((block) => block.paragraphs ?? [])
-    .map((paragraph) => paragraphText(paragraph))
-    .filter(Boolean)
-    .join("\n\n");
+    .flatMap((block) => block.paragraphs ?? []);
+
+/** 単語の外接矩形を、ページ（画像）の幅・高さに対する割合で返す */
+const wordBox = (word: VisionWord, page: VisionPage) => {
+  const vertices = word.boundingBox?.vertices ?? [];
+  if (vertices.length === 0 || !page.width || !page.height) return;
+  const xs = vertices.map((v) => v.x ?? 0);
+  const ys = vertices.map((v) => v.y ?? 0);
+  const left = Math.min(...xs);
+  const top = Math.min(...ys);
+  return {
+    x: left / page.width,
+    y: top / page.height,
+    w: (Math.max(...xs) - left) / page.width,
+    h: (Math.max(...ys) - top) / page.height,
+  };
+};
+
+/** 1枚分の OCR 結果から、段落ごとに空行で区切ったテキストと、単語の位置を取り出す */
+const annotate = (pages: VisionPage[]): { text: string; layout: OcrLayout } => {
+  const layout: OcrLayout = { paragraphs: [], words: [] };
+  for (const page of pages) {
+    for (const paragraph of textParagraphs(page)) {
+      const text = paragraphText(paragraph);
+      if (!text) continue;
+      const index = layout.paragraphs.push(text) - 1;
+      for (const word of paragraph.words ?? []) {
+        const box = wordBox(word, page);
+        const wordText = (word.symbols ?? []).map((symbol) => symbol.text).join("");
+        if (box && wordText) {
+          layout.words.push({ text: wordText, ...box, paragraph: index } satisfies OcrWord);
+        }
+      }
+    }
+  }
+  return { text: layout.paragraphs.join("\n\n"), layout };
+};
 
 /**
  * Google Cloud Vision（DOCUMENT_TEXT_DETECTION）で画像内の文字を読み取る。
  * 利用者の OAuth トークン（cloud-vision スコープ）で呼ぶ。
- * 複数枚の場合は画像ごとに [画像N] の見出しを付ける
+ * 複数枚の場合はテキストに画像ごとの [画像N] の見出しを付ける。layouts は images と同じ順
  */
-export const recognizeText = async (accessToken: string, images: Uint8Array[]): Promise<string> => {
+export const recognizeText = async (
+  accessToken: string,
+  images: Uint8Array[],
+): Promise<{ text: string; layouts: OcrLayout[] }> => {
   const texts: string[] = [];
+  const layouts: OcrLayout[] = [];
   for (let offset = 0; offset < images.length; offset += MAX_IMAGES_PER_REQUEST) {
     const batch = images.slice(offset, offset + MAX_IMAGES_PER_REQUEST);
     const res = await fetch(ANNOTATE_ENDPOINT, {
@@ -90,11 +143,15 @@ export const recognizeText = async (accessToken: string, images: Uint8Array[]): 
       if (response.error) {
         throw new Error(`Cloud Vision API error: ${response.error.message}`);
       }
-      texts.push(annotationText(response.fullTextAnnotation?.pages ?? []));
+      const { text, layout } = annotate(response.fullTextAnnotation?.pages ?? []);
+      texts.push(text);
+      layouts.push(layout);
     }
   }
 
-  return texts.length > 1
-    ? texts.map((text, i) => `[画像${i + 1}]\n\n${text}`).join("\n\n")
-    : (texts[0] ?? "");
+  const text =
+    texts.length > 1
+      ? texts.map((t, i) => `[画像${i + 1}]\n\n${t}`).join("\n\n")
+      : (texts[0] ?? "");
+  return { text, layouts };
 };

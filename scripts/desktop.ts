@@ -1,5 +1,5 @@
 /**
- * Maganize Desktop Launcher
+ * SnapRead Desktop Launcher
  * Launches the Vite server and opens an app-mode desktop window.
  */
 

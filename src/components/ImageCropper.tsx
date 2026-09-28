@@ -1,9 +1,12 @@
 import React, { useState, useRef, useCallback } from "react";
 import { Crop, ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import type { CropRect } from "../types.ts";
+import type { ImageFormat } from "../services/imageApi.ts";
 
 interface ImageCropperProps {
   imageUrl: string;
+  /** 切り抜いた画像の保存形式（元の画像に合わせる） */
+  outputFormat: ImageFormat;
   currentIndex: number;
   totalCount: number;
   /** 切り抜いた画像の data URL（範囲未選択で適用した場合は null） */
@@ -16,6 +19,7 @@ interface ImageCropperProps {
 
 export const ImageCropper: React.FC<ImageCropperProps> = ({
   imageUrl,
+  outputFormat,
   currentIndex,
   totalCount,
   onApplyCropToCurrent,
@@ -112,10 +116,10 @@ export const ImageCropper: React.FC<ImageCropperProps> = ({
       naturalCropH,
     );
 
-    const croppedDataUrl = canvas.toDataURL("image/jpeg", 0.95);
+    const croppedDataUrl = canvas.toDataURL(outputFormat.type, outputFormat.quality);
     onApplyCropToCurrent(croppedDataUrl);
     setCropRect(null);
-  }, [cropRect, onApplyCropToCurrent]);
+  }, [cropRect, onApplyCropToCurrent, outputFormat]);
 
   return (
     <div

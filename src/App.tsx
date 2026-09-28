@@ -11,7 +11,7 @@ import { useMediaStream } from "./hooks/useMediaStream.ts";
 import { useFolders } from "./hooks/useFolders.ts";
 import { useFolderWords } from "./hooks/useFolderWords.ts";
 import { aiService, DEFAULT_MODEL, isResponseId } from "./services/ai.ts";
-import { imageApi, itemImageUrl } from "./services/imageApi.ts";
+import { imageApi, imageFormatFor, itemImageUrl } from "./services/imageApi.ts";
 import { normalizeOcrText } from "./services/ocrText.ts";
 import { recognizeImages } from "./services/ocrApi.ts";
 import { errorMessage } from "./utils.ts";
@@ -165,14 +165,15 @@ export const App: React.FC = () => {
 
   // Capture current video frame into items
   const handleCapture = async () => {
-    const frame = captureFrame();
+    const source = activeSource === "none" ? "screen" : activeSource;
+    const frame = captureFrame(imageFormatFor(source));
     if (!frame) return;
     try {
       const imageId = await imageApi.uploadDataUrl(folderId, frame);
       const newItem: CaptureItem = {
         id: newId("cap"),
         imageId,
-        source: activeSource === "none" ? "screen" : activeSource,
+        source,
         timestamp: Date.now(),
       };
       addItems([newItem]);
@@ -478,6 +479,7 @@ export const App: React.FC = () => {
             {viewMode === "crop" && currentItem ? (
               <ImageCropper
                 imageUrl={itemImageUrl(currentItem)}
+                outputFormat={imageFormatFor(currentItem.source)}
                 currentIndex={Math.max(0, currentIndex)}
                 totalCount={items.length}
                 onApplyCropToCurrent={handleApplyCropToCurrent}

@@ -60,8 +60,9 @@ const folderRouter = ({ store, drive }: ApiDeps) =>
  * /api/images
  *   POST /?folderId=xxx  画像の保存（body: 画像バイナリ）→ { id }
  *   GET  /:id            画像の取得
+ *   GET  /:id/layout     OCR で認識した単語の位置（未 OCR なら 404）
  */
-const imageRouter = ({ drive }: ApiDeps) =>
+const imageRouter = ({ store, drive }: ApiDeps) =>
   new Router({ prefix: "/api/images" })
     .post("/", async (ctx) => {
       const folderId = ctx.request.url.searchParams.get("folderId");
@@ -87,6 +88,11 @@ const imageRouter = ({ drive }: ApiDeps) =>
       // 画像 ID ごとに内容は不変
       ctx.response.headers.set("Cache-Control", "private, max-age=31536000, immutable");
       ctx.response.body = image.data;
+    })
+    .get("/:id/layout", (ctx) => {
+      const layout = store.getImageLayout(ctx.params.id);
+      if (!layout) throw createHttpError(Status.NotFound, "layout not found");
+      ctx.response.body = layout;
     });
 
 /**
@@ -139,7 +145,7 @@ const googleAuthRouter = ({ drive }: ApiDeps) =>
  * /api/ocr
  *   POST /  body: { imageIds: string[] } → { text }  保存済みの画像を Cloud Vision で文字認識する
  */
-const ocrRouter = ({ drive }: ApiDeps) =>
+const ocrRouter = ({ store, drive }: ApiDeps) =>
   new Router({ prefix: "/api/ocr" }).post("/", async (ctx) => {
     let accessToken: string;
     try {
@@ -159,7 +165,12 @@ const ocrRouter = ({ drive }: ApiDeps) =>
         return image.data;
       }),
     );
-    ctx.response.body = { text: await recognizeText(accessToken, images) };
+    const { text, layouts } = await recognizeText(accessToken, images);
+    // 画像上にテキストを重ねられるよう、単語の位置を画像ごとに保存する
+    for (const [index, layout] of layouts.entries()) {
+      store.setImageLayout(imageIds[index], layout);
+    }
+    ctx.response.body = { text };
   });
 
 /** POST /api/shutdown  レスポンスを返してからサーバーを終了する */

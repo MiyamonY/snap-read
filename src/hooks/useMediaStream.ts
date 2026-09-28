@@ -1,6 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import type { SourceMode } from "../types.ts";
+import type { ImageFormat } from "../services/imageApi.ts";
 import { errorMessage } from "../utils.ts";
+
+/** キャプチャで要求する最大解像度（4K） */
+const MAX_CAPTURE_WIDTH = 3840;
+const MAX_CAPTURE_HEIGHT = 2160;
 
 export function useMediaStream() {
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -35,6 +40,11 @@ export function useMediaStream() {
       const mediaStream = await navigator.mediaDevices.getDisplayMedia({
         video: {
           displaySurface: "window",
+          // 指定しないと 1920x1080 に縮小されるため、高解像度を要求する（元の解像度を超えて拡大はされない）。
+          // 英文の読み取りが目的なので、フレームレートより解像度を優先する
+          width: { ideal: MAX_CAPTURE_WIDTH },
+          height: { ideal: MAX_CAPTURE_HEIGHT },
+          frameRate: { ideal: 5 },
         },
         audio: false,
       });
@@ -75,8 +85,8 @@ export function useMediaStream() {
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
         video: {
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
+          width: { ideal: MAX_CAPTURE_WIDTH },
+          height: { ideal: MAX_CAPTURE_HEIGHT },
           facingMode: "environment",
         },
         audio: false,
@@ -121,7 +131,7 @@ export function useMediaStream() {
   /**
    * 現在のビデオフレームを静止画としてキャプチャ
    */
-  const captureFrame = useCallback((): string | null => {
+  const captureFrame = useCallback((format: ImageFormat): string | null => {
     const video = videoRef.current;
     if (!video || video.readyState < 2) {
       return null;
@@ -134,7 +144,7 @@ export function useMediaStream() {
     if (!ctx) return null;
 
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    return canvas.toDataURL("image/jpeg", 0.95);
+    return canvas.toDataURL(format.type, format.quality);
   }, []);
 
   return {

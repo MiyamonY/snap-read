@@ -7,6 +7,7 @@ import type {
   ChatMessage,
   FolderPatch,
   SourceMode,
+  OcrLayout,
   StoredFolder,
   VocabularyEntry,
   VocabularyInput,
@@ -39,7 +40,9 @@ CREATE TABLE IF NOT EXISTS images (
   drive_file_id TEXT,
   -- 一度でもフォルダの画像として保存されたか（未参照の画像の掃除に使う）
   attached      INTEGER NOT NULL DEFAULT 0,
-  created_at    INTEGER NOT NULL
+  created_at    INTEGER NOT NULL,
+  -- OCR で認識した単語の位置（JSON: OcrLayout）。画像上にテキストを重ねるために使う
+  ocr_layout    TEXT
 );
 CREATE INDEX IF NOT EXISTS images_folder ON images(folder_id);
 
@@ -183,6 +186,15 @@ export class Store {
     }
     this.db = new DatabaseSync(path);
     this.db.exec(SCHEMA);
+    this.migrate();
+  }
+
+  /** 既存のデータベースに、後から追加した列を足す */
+  private migrate(): void {
+    const columns = this.all<{ name: string }>("PRAGMA table_info(images)").map((c) => c.name);
+    if (!columns.includes("ocr_layout")) {
+      this.db.exec("ALTER TABLE images ADD COLUMN ocr_layout TEXT");
+    }
   }
 
   close(): void {
@@ -470,6 +482,20 @@ export class Store {
       this.removeImages(images);
       return images;
     });
+  }
+
+  setImageLayout(id: string, layout: OcrLayout): void {
+    this.db
+      .prepare("UPDATE images SET ocr_layout = ? WHERE id = ?")
+      .run(JSON.stringify(layout), id);
+  }
+
+  getImageLayout(id: string): OcrLayout | undefined {
+    const row = this.get<{ ocr_layout: string | null }>(
+      "SELECT ocr_layout FROM images WHERE id = ?",
+      id,
+    );
+    return row?.ocr_layout ? (JSON.parse(row.ocr_layout) as OcrLayout) : undefined;
   }
 
   // ---- drive trash queue ----

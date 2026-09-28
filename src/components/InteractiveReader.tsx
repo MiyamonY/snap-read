@@ -13,6 +13,13 @@ import {
 } from "lucide-react";
 import type { CaptureItem, VocabularyInput, WordDefinition } from "../types.ts";
 import { ImageViewer } from "./ImageViewer.tsx";
+import {
+  WORD_TOKEN,
+  cleanPhrase,
+  findSavedPhraseTokens,
+  savedPhraseList,
+  tokenize,
+} from "../services/wordMatch.ts";
 import { aiService, MODEL_LABEL } from "../services/ai.ts";
 import { normalizeOcrText } from "../services/ocrText.ts";
 
@@ -22,35 +29,14 @@ const COLUMN_OPTIONS: ColumnCount[] = [1, 2, 4];
 const COLUMNS_STORAGE_KEY = "snapread_reader_columns";
 const SHOW_IMAGES_STORAGE_KEY = "snapread_reader_images";
 
+/** 語義ポップアップの幅（w-72）と、選択範囲の上に表示するときのずらし量 */
+const POPOVER_WIDTH = 288;
+const POPOVER_OFFSET = 130;
+
 const COLUMN_CLASSES: Record<ColumnCount, string> = {
   1: "columns-1",
   2: "columns-2 gap-8 [column-rule:1px_solid_var(--color-slate-800)]",
   4: "columns-4 gap-6 [column-rule:1px_solid_var(--color-slate-800)]",
-};
-
-/** 英単語（前後の記号付き）: 例 "“word,” */
-const WORD_TOKEN = /^([^a-zA-Z]*)([a-zA-Z]+(?:['’-][a-zA-Z]+)*)([^a-zA-Z]*)$/u;
-
-const tokenize = (paragraph: string) => paragraph.split(/(\s+)/u);
-
-const cleanPhrase = (text: string) =>
-  text.replaceAll(/^[^a-zA-Z]+|[^a-zA-Z]+$/gu, "").replaceAll(/\s+/gu, " ");
-
-/** 段落内で、単語帳に登録済みの熟語（2語以上）に含まれるトークンの位置 */
-const findSavedPhraseTokens = (tokens: string[], phrases: string[][]): Set<number> => {
-  const words = tokens.flatMap((token, index) => {
-    const match = token.match(WORD_TOKEN);
-    return match ? [{ index, word: match[2].toLowerCase() }] : [];
-  });
-  const hits = new Set<number>();
-  for (const phrase of phrases) {
-    for (let start = 0; start + phrase.length <= words.length; start++) {
-      if (phrase.every((w, k) => words[start + k].word === w)) {
-        for (let k = 0; k < phrase.length; k++) hits.add(words[start + k].index);
-      }
-    }
-  }
-  return hits;
 };
 
 /** 選択中の範囲（段落番号とトークン位置） */
@@ -113,7 +99,6 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
 
   // Popover position
   const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null);
-  const containerRef = useRef<HTMLDivElement | null>(null);
   // 後から始めた検索の結果を、先に始めた検索の結果で上書きしないための通し番号
   const lookupSeqRef = useRef(0);
 
@@ -139,21 +124,19 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
 
   /** 語義を検索してポップアップを表示する（rect: 選択範囲の表示位置） */
   const openLookup = async (text: string, context: string, rect: DOMRect) => {
-    const container = containerRef.current;
-    if (!container) return;
-
     setSelectedWord(text);
     setSelectedContext(context);
 
-    // Position above the selection, relative to the (scrollable) container
-    const containerRect = container.getBoundingClientRect();
-    const top = rect.top - containerRect.top + container.scrollTop;
-    const left = rect.left - containerRect.left + container.scrollLeft + rect.width / 2;
+    // 本文・画像のどちらから開いても同じように表示できるよう、画面（viewport）基準で配置する。
+    // 選択範囲の上に表示し、上に余裕がなければ下に表示する
     setPopoverPos({
-      top: Math.max(10, top - 130),
+      top: rect.top - POPOVER_OFFSET >= 10 ? rect.top - POPOVER_OFFSET : rect.bottom + 8,
       left: Math.max(
-        container.scrollLeft + 10,
-        Math.min(left - 144, container.scrollLeft + container.clientWidth - 290),
+        10,
+        Math.min(
+          rect.left + rect.width / 2 - POPOVER_WIDTH / 2,
+          globalThis.innerWidth - POPOVER_WIDTH - 10,
+        ),
       ),
     });
     setIsLookingUp(true);
@@ -242,7 +225,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
   // Render text with clickable words
   const renderInteractiveText = (text: string) => {
     const paragraphs = normalizeOcrText(text).split("\n\n");
-    const savedPhrases = [...savedWords].filter((w) => w.includes(" ")).map((w) => w.split(" "));
+    const savedPhrases = savedPhraseList(savedWords);
 
     return paragraphs.map((para, pIdx) => {
       if (!para.trim()) return <div key={pIdx} className="h-3" />;
@@ -430,8 +413,8 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
       {/* Main Reader View (text | images) */}
       <div className="flex flex-1 min-h-0">
         <div
-          ref={containerRef}
           onWheel={handleWheel}
+          onScroll={closePopover}
           className={`relative flex-1 min-w-0 min-h-0 p-5 ${
             columnCount === 1 ? "overflow-y-auto" : "overflow-x-auto overflow-y-hidden"
           } ${fontSizeClass}`}
@@ -489,7 +472,7 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
           {/* Word Definition Popover Card */}
           {selectedWord && popoverPos && (
             <div
-              className="word-popover absolute z-30 w-72 bg-slate-900 border border-indigo-500/50 rounded-xl p-3.5 shadow-2xl animate-in fade-in zoom-in-95 duration-100"
+              className="word-popover fixed z-50 w-72 bg-slate-900 border border-indigo-500/50 rounded-xl p-3.5 shadow-2xl animate-in fade-in zoom-in-95 duration-100"
               style={{
                 top: `${popoverPos.top}px`,
                 left: `${popoverPos.left}px`,
@@ -584,7 +567,16 @@ export const InteractiveReader: React.FC<InteractiveReaderProps> = ({
         </div>
         {showImages && (
           <div className="w-1/2 shrink-0 border-l border-slate-800">
-            <ImageViewer items={items} />
+            <ImageViewer
+              items={items}
+              savedWords={savedWords}
+              layoutVersion={ocrText}
+              onScroll={closePopover}
+              onLookup={(text, context, rect) => {
+                setSelection(null);
+                openLookup(text, context, rect);
+              }}
+            />
           </div>
         )}
       </div>
